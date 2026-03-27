@@ -50,5 +50,3 @@
 - Runs in **headed mode** (visible browser) by default — change `headless=False` → `True` once you've confirmed it works.
 - `slow_mo=300` adds a 300ms pause between actions so you can follow along. Remove it for speed.
 - The browser stays open after completion so you can inspect. Press Enter in the terminal to close.
-
-test
