@@ -1,0 +1,66 @@
+# ============================================================================
+# Snap — .gitignore
+# ============================================================================
+
+# ---------- Secrets ----------
+# Contains API keys (Gemini, Airtable) — NEVER commit
+.env
+backend/.env
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+backend/.venv/
+
+# ---------- Uploaded images (local prototype storage) ----------
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.png
+uploads/*.gif
+uploads/*.webp
+
+# ---------- Node (in case frontend ever gets a build step) ----------
+node_modules/
+package-lock.json
+yarn.lock
+
+# ---------- OS files ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- IDE / Editor ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- Testing / Coverage ----------
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/

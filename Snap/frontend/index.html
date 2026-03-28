@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <!-- Mobile viewport — prevents zoom, sets proper width -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- PWA meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    
+    <title>Snap — 180 Snacks</title>
+    
+    <!-- PWA Manifest (defines home screen icon, standalone mode, etc.) -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Apple touch icon (shown on iOS home screen) -->
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    
+    <!-- Camera app styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+    <!-- ================================================================== -->
+    <!-- CAMERA VIEWFINDER                                                   -->
+    <!-- Full-screen live camera feed — the main UI of the app               -->
+    <!-- ================================================================== -->
+    <div id="camera-container">
+        <video id="viewfinder" autoplay playsinline muted></video>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- FLASH OVERLAY                                                       -->
+    <!-- Brief white flash when a photo is captured (visual feedback)         -->
+    <!-- ================================================================== -->
+    <div id="flash"></div>
+
+    <!-- ================================================================== -->
+    <!-- CONNECTIVITY INDICATOR                                              -->
+    <!-- Small green/red dot in the top-left showing online/offline status    -->
+    <!-- ================================================================== -->
+    <div id="connectivity">
+        <div class="dot"></div>
+        <span id="connectivity-text">Online</span>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- SYNC BADGE                                                          -->
+    <!-- Red badge in top-right showing number of photos waiting to sync     -->
+    <!-- Shows a number when photos are queued, hidden when queue is empty    -->
+    <!-- ================================================================== -->
+    <div id="sync-badge" class="hidden">0</div>
+
+    <!-- ================================================================== -->
+    <!-- TOAST                                                               -->
+    <!-- Brief notification at the top (e.g. "Photo captured!")               -->
+    <!-- ================================================================== -->
+    <div id="toast"></div>
+
+    <!-- ================================================================== -->
+    <!-- BOTTOM CONTROLS                                                     -->
+    <!-- Contains the shutter button (centered)                              -->
+    <!-- ================================================================== -->
+    <div id="controls">
+        <button id="shutter-btn" aria-label="Take photo"></button>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- INFO BOX                                                            -->
+    <!-- Bottom-right: user name + retailer name                             -->
+    <!-- Tappable to edit. Values persist via localStorage.                   -->
+    <!-- ================================================================== -->
+    <div id="info-box">
+        <div class="input-group">
+            <label for="user-name">Name</label>
+            <input type="text" id="user-name" placeholder="Tap to enter" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="input-group">
+            <label for="retailer-name">Retailer</label>
+            <input type="text" id="retailer-name" placeholder="Tap to enter" autocomplete="off" spellcheck="false">
+        </div>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- ERROR SCREEN                                                        -->
+    <!-- Shown when camera permission is denied or camera is unavailable      -->
+    <!-- ================================================================== -->
+    <div id="error-screen" class="hidden">
+        <div class="error-icon">📷</div>
+        <p id="error-message">Camera error</p>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- APP SCRIPTS (ES Modules)                                            -->
+    <!-- ================================================================== -->
+    <script type="module" src="/static/js/app.js"></script>
+
+    <!-- ================================================================== -->
+    <!-- CONNECTIVITY DETECTION (inline — no module dependency)               -->
+    <!-- Updates the green/red dot based on online/offline status             -->
+    <!-- ================================================================== -->
+    <script>
+        function updateConnectivity() {
+            const el = document.getElementById('connectivity');
+            const text = document.getElementById('connectivity-text');
+            if (navigator.onLine) {
+                el.classList.remove('offline');
+                text.textContent = 'Online';
+            } else {
+                el.classList.add('offline');
+                text.textContent = 'Offline';
+            }
+        }
+        window.addEventListener('online', updateConnectivity);
+        window.addEventListener('offline', updateConnectivity);
+        updateConnectivity();
+    </script>
+
+</body>
+</html>
