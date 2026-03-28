@@ -28,17 +28,16 @@ This is the single source of truth for the ShelfTag project. It serves three aud
   - [Project Structure](#project-structure)
   - [Microservice Responsibilities](#microservice-responsibilities)
   - [Airtable Integration](#airtable-integration)
-  - [Gemini Flash Extraction](#gemini-flash-extraction)
+  - [Gemini Flash Lite Extraction](#gemini-flash-lite-extraction)
   - [Offline Architecture](#offline-architecture)
   - [Currency Detection via Geolocation](#currency-detection-via-geolocation)
   - [PWA Behavior & Distribution](#pwa-behavior--distribution)
   - [Security Rules](#security-rules)
-  - [Prerequisites & Installation](#prerequisites--installation)
-  - [Running the Prototype](#running-the-prototype)
+  - [Prerequisites & Deployment](#prerequisites--deployment)
+  - [Deploying to Cloudflare Workers](#deploying-to-cloudflare-workers)
   - [Phone Camera Access](#phone-camera-access)
-  - [Production Migration Path](#production-migration-path)
 - [Architecture Decisions & Rationale](#architecture-decisions--rationale)
-  - [Why Gemini Flash (not Claude, GPT-4o, or open-source OCR)](#why-gemini-flash)
+  - [Why Gemini Flash Lite (not Claude, GPT-4o, or open-source OCR)](#why-gemini-flash-lite)
   - [Why Cloudflare (not Vercel, AWS, Supabase)](#why-cloudflare)
   - [Why No Image Compression](#why-no-image-compression)
   - [Why Vanilla JS (no React, no build step)](#why-vanilla-js)
@@ -58,7 +57,7 @@ ShelfTag is a camera app on your phone that replaces manual data entry. Instead 
 
 This takes about 5 minutes.
 
-**1. Open the link on your phone.** You'll receive a URL or QR code from your manager (something like `shelftag.180snacks.com` or a localhost link for testing).
+**1. Open the link on your phone.** You'll receive a URL or QR code from your manager. The current dev URL is `shelftagdev.jonathankim829.workers.dev`. Production will be something like `shelftag.180snacks.com`.
 
 **2. Allow camera access.** When the app asks for camera permission, tap "Allow." This is required — the whole app is a camera.
 
@@ -91,7 +90,7 @@ This takes about 5 minutes.
 
 **Changing retailers?** Just tap the retailer name in the bottom-right box and type the new store name.
 
-**Red badge won't go away?** Make sure you have a good internet connection. The badge shows how many photos are still waiting to upload. If it persists, check that the backend server is running (for prototype testing).
+**Red badge won't go away?** Make sure you have a good internet connection. The badge shows how many photos are still waiting to upload. If it persists, check that the Cloudflare Worker is running properly.
 
 **Camera shows black screen?** Make sure you allowed camera permission. Check that no other app is using the camera. On iPhone, make sure you're using Safari (Chrome on iOS has limited camera API support for PWAs).
 
@@ -99,7 +98,7 @@ This takes about 5 minutes.
 
 **App not opening?** Try opening the URL in your browser again and re-adding to your home screen.
 
-**Airtable shows no new rows?** Check the terminal logs for error messages. Verify your `.env` file has valid API keys with the correct scopes.
+**Airtable shows no new rows?** Check the Cloudflare Worker logs (via `wrangler tail` or the Cloudflare dashboard) for error messages. Verify your Worker environment variables have valid API keys with the correct scopes.
 
 **App doesn't work offline?** The app must be loaded at least once with a good connection to cache files. After that first load, it works offline. If it still doesn't work, open DevTools → Application → Service Workers and verify the service worker is registered.
 
@@ -126,22 +125,24 @@ Currently this is 100% manual — reps take photos, then later sit down and type
 ## System Architecture
 
 ```
-Phone (PWA)                    Backend (FastAPI)               External APIs
-─────────────                  ─────────────────               ─────────────
-Camera capture                 storage_service.py
-  ↓                              → stores image locally
-IndexedDB queue                    (R2 in production)
-  ↓ (when online)                  → returns URL
-POST /api/sync                 gemini_service.py               → Google Gemini Flash
+Phone (PWA)                    Backend (Cloudflare Worker)      External APIs
+─────────────                  ─────────────────────────        ─────────────
+Camera capture                 storage_service
+  ↓                              → stores image in R2
+IndexedDB queue                    → returns presigned URL
+  ↓ (when online)
+POST /api/sync                 gemini_service                  → Google Gemini Flash Lite
   ↓                              → sends image + prompt
                                    → gets structured JSON
-                               airtable_service.py             → Airtable REST API
+                               airtable_service                → Airtable REST API
                                  → creates record with
                                    extracted fields +
                                    image URL + metadata
-                               ─────────────────
-                               main.py orchestrates
+                               ─────────────────────────
+                               Worker orchestrates
                                all three services
+
+Deployed at: shelftagdev.jonathankim829.workers.dev
 ```
 
 ### UI Spec
@@ -163,25 +164,23 @@ Step by step, what happens when a user takes a photo:
 
 1. User takes photo → full resolution JPEG captured via `getUserMedia` API
 2. Photo + metadata (user name, retailer, timestamp MM/DD/YYYY HH:MM, GPS coords) stored in IndexedDB
-3. Sync module detects connectivity (`navigator.onLine` + backend health ping)
+3. Sync module detects connectivity (`navigator.onLine` + Worker health check ping)
 4. When online: POST `{ image_base64, metadata }` to `/api/sync`
-5. Backend stores image locally → gets a URL
-6. Backend sends image to Gemini Flash with extraction prompt → gets structured JSON
-7. Backend computes `RT/oz = Retail Regular / NW oz`
-8. Backend creates Airtable record via REST API with all fields + image URL
-9. Airtable downloads the image from the URL and stores its own copy
-10. Backend responds success → frontend marks photo as synced → deletes local copy from IndexedDB
+5. Worker stores image in Cloudflare R2 → gets a presigned URL
+6. Worker sends image to Gemini Flash Lite with extraction prompt → gets structured JSON
+7. Worker computes `RT/oz = Retail Regular / NW oz`
+8. Worker creates Airtable record via REST API with all fields + image URL
+9. Airtable downloads the image from the presigned URL and stores its own copy
+10. Worker responds success → frontend marks photo as synced → deletes local copy from IndexedDB
 
 ## Tech Stack
 
 | Layer | Technology | Why |
 |---|---|---|
 | Frontend | Vanilla HTML/CSS/JS PWA | No build step, no framework overhead, works offline |
-| Backend (prototype) | FastAPI (Python) | Quick to prototype, async, serves frontend too |
-| Backend (production) | Cloudflare Workers | Serverless, scales automatically, free tier |
-| Image storage (prototype) | Local disk (`/uploads/`) | Simple for testing |
-| Image storage (production) | Cloudflare R2 | Zero egress fees (critical since Airtable downloads each image) |
-| AI extraction | Google Gemini 2.0 Flash | Cheapest reliable multimodal LLM (~$0.0001/photo) |
+| Backend | Cloudflare Workers | Serverless, scales automatically, free tier, zero cold starts |
+| Image storage | Cloudflare R2 | Zero egress fees (critical since Airtable downloads each image) |
+| AI extraction | Google Gemini Flash Lite (`gemini-flash-lite-latest`) | Cheapest reliable multimodal LLM (~$0.0001/photo) |
 | Database | Airtable (existing) | Already in use by the team, REST API |
 | Local persistence | localStorage + IndexedDB | Standard browser APIs, no dependencies |
 
@@ -189,29 +188,28 @@ Step by step, what happens when a user takes a photo:
 
 ```
 shelftag/
-├── Context.md                    # Architecture decisions and notes
-├── README.md                     # This document (or a version of it)
 ├── .gitignore
+├── package.json                  # Wrangler dev dependency, deploy/dev/tail scripts
+├── wrangler.toml                 # Cloudflare Workers config (R2 binding, env vars, asset dir)
 │
-├── backend/
-│   ├── .venv/                    # Python virtual environment (git-ignored, created during setup)
-│   ├── .env                      # API keys (git-ignored, created from .env.example)
-│   ├── requirements.txt          # fastapi, uvicorn, httpx, pydantic, python-dotenv
-│   ├── main.py                   # FastAPI app: routes, CORS, static files, pipeline orchestration
-│   ├── __init__.py
+├── src/
+│   └── worker.js                 # Cloudflare Worker: API routes, Gemini extraction, Airtable, R2 image serving
+│
+├── backend/                      # Legacy Python backend (reference only — not deployed)
+│   ├── .env                      # API keys (git-ignored)
+│   ├── requirements.txt
+│   ├── main.py
 │   ├── models/
-│   │   ├── __init__.py
-│   │   └── schemas.py            # Pydantic models: SyncRequest, SyncResponse,GeminiExtractionResult
+│   │   └── schemas.py
 │   └── services/
-│       ├── __init__.py
-│       ├── gemini_service.py     # Gemini Flash API: image → structured JSON
-│       ├── storage_service.py    # Image storage: local disk (R2 in production)
-│       └── airtable_service.py   # Airtable API: create records, compute RT/oz, currency detection
+│       ├── gemini_service.py
+│       ├── storage_service.py
+│       └── airtable_service.py
 │
 ├── docs/
-│   └── LLM.md                    # Documentation
+│   └── LLM.md                    # Documentation (this file)
 │
-├── frontend/
+├── frontend/                     # PWA served by wrangler.toml [assets] directive
 │   ├── index.html                # Main PWA page (fullscreen camera UI)
 │   ├── manifest.json             # PWA manifest (standalone mode, icons)
 │   ├── sw.js                     # Service worker (offline caching, auto-updates)
@@ -226,18 +224,18 @@ shelftag/
 │   └── icons/
 │       ├── icon-192.png          # PWA home screen icon
 │       └── icon-512.png          # PWA splash screen icon
-│
-└── uploads/                      # Local image storage (prototype only, git-ignored)
 ```
+
+**Deployed at:** `shelftagdev.jonathankim829.workers.dev`
 
 ## Microservice Responsibilities
 
 | Service | File | Responsibility | External Dependency |
 |---|---|---|---|
-| Gemini Service | `backend/services/gemini_service.py` | Image → structured product data | Google Gemini Flash API |
-| Storage Service | `backend/services/storage_service.py` | Image storage + URL generation | Local disk (R2 in production) |
-| Airtable Service | `backend/services/airtable_service.py` | Record creation in Airtable | Airtable REST API |
-| Orchestrator | `backend/main.py` | Routes, CORS, static files, pipeline | FastAPI |
+| Gemini Service | `gemini_service` | Image → structured product data | Google Gemini Flash Lite API |
+| Storage Service | `storage_service` | Image storage in R2 + presigned URL generation | Cloudflare R2 |
+| Airtable Service | `airtable_service` | Record creation in Airtable | Airtable REST API |
+| Orchestrator | Cloudflare Worker | Routes, CORS, pipeline orchestration | Cloudflare Workers runtime |
 
 ## Airtable Integration
 
@@ -247,7 +245,7 @@ shelftag/
 - **Required scopes:** `data.records:write`, `data.records:read`
 - **Base ID:** `appb7454UmfsMhkaJ`
 - **Table ID:** `tblytCTkc8gfNMWh8`
-- All stored as environment variables in backend — NEVER in frontend code
+- All stored as Cloudflare Worker environment variables (via `wrangler secret`) — NEVER in frontend code
 
 ### API
 
@@ -257,30 +255,30 @@ shelftag/
 
 | Airtable Column | Source | Notes |
 |---|---|---|
-| **Flavor** | Gemini Flash | Product/flavor name (e.g. "Serenity Trail Mix") |
+| **Flavor** | Gemini Flash Lite | Product/flavor name (e.g. "Serenity Trail Mix") |
 | **Date of Visit** | App metadata | MM/DD/YYYY format |
 | **IMage** | R2 URL | Photo attachment. **KNOWN TYPO** — should be "Image". Team is aware and will fix. Code uses "IMage" to match current column name. |
 | **Retailer** | App metadata | User-entered store name from the app |
-| **Brand** | Gemini Flash | Manufacturer (e.g. "Southern Grove", "Power Up") |
-| **Flavor Description** | Gemini Flash | Comma-separated ingredients from package front |
-| **Count** | Gemini Flash | As printed on package (e.g. "16oz", "8ct 1.75oz") |
-| **Type** | Gemini Flash | One of: "Single Bag", "Multi Box", "Multi Bag" — visual judgment |
-| **NW oz** | Gemini Flash | Total net weight in ounces (number). For multi-packs: count × per-unit weight. |
-| **Retail Regular** | Gemini Flash | Shelf price (number, no dollar sign) |
+| **Brand** | Gemini Flash Lite | Manufacturer (e.g. "Southern Grove", "Power Up") |
+| **Flavor Description** | Gemini Flash Lite | Comma-separated ingredients from package front |
+| **Count** | Gemini Flash Lite | As printed on package (e.g. "16oz", "8ct 1.75oz") |
+| **Type** | Gemini Flash Lite | One of: "Single Bag", "Multi Box", "Multi Bag" — visual judgment |
+| **NW oz** | Gemini Flash Lite | Total net weight in ounces (number). For multi-packs: count × per-unit weight. |
+| **Retail Regular** | Gemini Flash Lite | Shelf price (number, no dollar sign) |
 | **RT/oz** | Computed server-side | = Retail Regular / NW oz (rounded to 2 decimal places). If either value is null, RT/oz is null. |
 | **Notes** | Auto or blank | Blank unless outside US → auto-populated with currency info via geolocation |
 | **NW g** | Manual | User fills in Airtable (used for international products with gram-based weights) |
 | **FX NW oz** | Duplicated from NW oz | **Currently duplicates NW oz data.** Team will clarify intended purpose. For now, code copies NW oz value into this column. |
 | **Category** | Manual | User fills in Airtable |
 
-## Gemini Flash Extraction
+## Gemini Flash Lite Extraction
 
 ### API Details
 
-- **Model:** `gemini-2.0-flash` (structured output mode)
-- **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
+- **Model:** `gemini-flash-lite-latest` (structured output mode)
+- **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`
 - **Auth:** API key as query parameter
-- **Cost:** ~$0.10 input / $0.40 output per 1M tokens. One image ≈ 250–500 tokens + ~100 token prompt. Roughly **$0.0001 per photo** (50 photos ≈ half a penny).
+- **Cost:** Extremely cheap — Flash Lite is the most cost-effective multimodal model in the Gemini lineup. Roughly **$0.0001 per photo** or less (50 photos ≈ half a penny).
 
 ### Key Configuration
 
@@ -291,7 +289,7 @@ shelftag/
 
 ### Extraction Prompt
 
-Located in `backend/services/gemini_service.py`. Instructs the model to extract: flavor, brand, flavor_description, count, type, nw_oz, retail_regular. Handles multi-packs by computing total weight (count × per-unit weight). Picks the most prominent product if multiple are in frame. Uses regular price if both sale and regular are visible.
+Located in `gemini_service.py` (deployed as part of the Cloudflare Worker). Instructs the model to extract: flavor, brand, flavor_description, count, type, nw_oz, retail_regular. Handles multi-packs by computing total weight (count × per-unit weight). Picks the most prominent product if multiple are in frame. Uses regular price if both sale and regular are visible.
 
 ### JSON Schema (for structured output mode)
 
@@ -328,15 +326,15 @@ The app is designed for stores with poor or no connectivity:
 
 1. **Service worker** caches ALL app files on first load — app opens from local cache with zero network needed.
 2. **IndexedDB** stores full-resolution photos + metadata locally. Capacity is typically GB-scale on modern phones.
-3. **Sync module** monitors connectivity via `navigator.onLine` + backend health check ping.
-4. When online, sync module drains the queue **sequentially** (one photo at a time to avoid overwhelming the backend).
+3. **Sync module** monitors connectivity via `navigator.onLine` + Worker health check ping.
+4. When online, sync module drains the queue **sequentially** (one photo at a time to avoid overwhelming the Worker).
 5. If connectivity drops mid-sync, it stops and retries when signal returns.
 6. A **30-second periodic retry** acts as a safety net.
 
 ## Currency Detection via Geolocation
 
 - Geolocation API pings on app open + `watchPosition` for continuous updates
-- Backend checks coordinates against US bounding boxes (continental + Alaska + Hawaii)
+- Worker checks coordinates against US bounding boxes (continental + Alaska + Hawaii)
 - If outside US: populates Airtable "Notes" column with `"International (lat: XX.XX, lon: YY.YY) — confirm currency"`
 - **Production improvement:** integrate a reverse geocoding API (Google Maps or OpenCage) for exact country → currency mapping
 - GPS can be flaky indoors — this is best-effort, app works fine without it
@@ -344,34 +342,34 @@ The app is designed for stores with poor or no connectivity:
 
 ## PWA Behavior & Distribution
 
-**Distribution:** No app store needed. Users visit the URL (e.g. `shelftag.180snacks.com`) in their phone browser and tap "Add to Home Screen." Can share via QR code.
+**Distribution:** No app store needed. Users visit the URL (`shelftagdev.jonathankim829.workers.dev` for dev, or `shelftag.180snacks.com` for production) in their phone browser and tap "Add to Home Screen." Can share via QR code.
 
 **Session behavior:** Tapping the home screen icon reopens the same context, not a new tab. State is restored from localStorage/IndexedDB if the OS kills the process. The `manifest.json` uses `"display": "standalone"` mode.
 
-**Updates:** Service worker caches all app files locally so the app works fully offline after first load. When code is updated on Cloudflare Pages (or the backend in prototype), the service worker detects the change on next app open and pulls new files silently. No user action needed.
+**Updates:** Service worker caches all app files locally so the app works fully offline after first load. When code is updated on Cloudflare Workers, the service worker detects the change on next app open and pulls new files silently. No user action needed.
 
 ## Security Rules
 
-- API keys (Gemini, Airtable, R2) are ONLY stored in backend environment variables
+- API keys (Gemini, Airtable) are ONLY stored in Cloudflare Worker environment variables (set via `wrangler secret` or Cloudflare dashboard)
 - Frontend NEVER has direct access to any API key
-- Phone only talks to the backend endpoint
+- Phone only talks to the Worker endpoint (`shelftagdev.jonathankim829.workers.dev`)
 - R2 presigned URLs expire after ~1 hour (just enough for Airtable to download the image)
-- `.env` and `.venv/` are git-ignored; `.env.example` is committed as a template
+- `.env` files are for local development reference only and are git-ignored
 
-## Prerequisites & Installation
+## Prerequisites & Deployment
 
 ### Software Requirements
 
 | Software | Version | Purpose |
 |---|---|---|
-| Python | 3.10–3.13 (**not 3.14** — pydantic-core fails to build) | Backend server |
-| pip | (bundled) | Package manager |
+| Node.js | 18+ | Wrangler CLI (Cloudflare Workers tooling) |
+| Wrangler | Latest | Cloudflare Workers CLI for deploy, secrets, tail |
 | Git | Any recent | Version control |
 | Modern browser | Chrome/Safari/Firefox | Testing the PWA |
 
 ### API Keys Required
 
-**1. Google Gemini Flash API Key**
+**1. Google Gemini Flash Lite API Key**
 - Go to aistudio.google.com/apikey
 - Sign in with a Google account
 - Click "Create API Key"
@@ -385,82 +383,59 @@ The app is designed for stores with poor or no connectivity:
 - Under "Access", add the "Store Visits Database" base
 - Click "Create token" and copy it
 
-## Running the Prototype
+## Deploying to Cloudflare Workers
 
-### Step 1: Create a virtual environment (Python 3.13)
+### Initial Setup (already completed)
 
-Python 3.14 is incompatible with pydantic-core. Use 3.13 explicitly:
-
-**Windows:**
-```bash
-cd shelftag/backend
-py -3.13 -m venv .venv
-.\.venv\Scripts\activate
-python --version              # Should show 3.13.x
-```
-
-**macOS / Linux:**
-```bash
-cd shelftag/backend
-python3.13 -m venv .venv
-source .venv/bin/activate
-python --version              # Should show 3.13.x
-```
-
-### Step 2: Install dependencies and configure
+These steps have already been done and don't need to be repeated:
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env
+cd shelftag
+npm install                                    # Installs wrangler
+npx wrangler r2 bucket create shelftag-images  # R2 bucket for product images
+npx wrangler secret put GEMINI_API_KEY         # Google AI Studio key
+npx wrangler secret put AIRTABLE_PAT           # Airtable Personal Access Token
+npx wrangler deploy                            # Initial deployment
 ```
 
-Edit `.env` and fill in your actual keys:
+Note: `AIRTABLE_BASE_ID` and `AIRTABLE_TABLE_ID` are set as plain `[vars]` in `wrangler.toml` (not secrets — they're not sensitive).
 
-```
-GEMINI_API_KEY=your_actual_gemini_key_here
-AIRTABLE_PAT=your_actual_airtable_pat_here
-AIRTABLE_BASE_ID=appb7454UmfsMhkaJ
-AIRTABLE_TABLE_ID=tblytCTkc8gfNMWh8
-BASE_URL=http://localhost:8000
-```
+### Redeploying After Code Changes
 
-Start the server:
+Any time you change frontend files (CSS, JS, HTML) or the Worker backend (`src/worker.js`), redeploy with:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+npx wrangler deploy
 ```
 
-Open `http://localhost:8000` on your computer or `http://<your-local-ip>:8000` on your phone (same Wi-Fi network). (!! Look at Phone Camera Access section if camera doesn't work on phone)
+That's it — one command pushes both the Worker code and all `frontend/` static assets together. Changes are live within seconds.
+
+If you update the service worker cache version in `sw.js` (e.g. `shelftag-v2` → `shelftag-v3`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches.
+
+The Worker is live at: `shelftagdev.jonathankim829.workers.dev`
 
 ### Testing
 
-1. Allow camera access when prompted
-2. Enter your name and a retailer name
-3. Point the camera at a snack product and tap the shutter button
-4. Watch the terminal for logs showing image stored → Gemini extraction → Airtable record created
-5. Check Airtable — a new row should appear with all fields populated
+1. Open `shelftagdev.jonathankim829.workers.dev` on your phone
+2. Allow camera access when prompted
+3. Enter your name and a retailer name
+4. Point the camera at a snack product and tap the shutter button
+5. Check `wrangler tail` for logs showing image stored → Gemini extraction → Airtable record created
+6. Check Airtable — a new row should appear with all fields populated
+
+### Monitoring
+
+- **Live logs:** `wrangler tail` streams real-time Worker logs
+- **Dashboard:** Cloudflare dashboard → Workers & Pages → shelftag → Logs
+- **R2 storage:** Cloudflare dashboard → R2 → shelftag-images bucket
 
 ## Phone Camera Access
 
-Browsers require HTTPS for camera access (except localhost). For phone testing over LAN:
-
-**Option A (easiest):** Chrome on phone → `chrome://flags` → search "Insecure origins treated as secure" → add your laptop's URL (e.g. `http://192.168.1.100:8000`).
-
-**Option B (proper):** Use [mkcert](https://github.com/FiloSottile/mkcert) to create a local HTTPS certificate.
-
-## Production Migration Path
-
-| Prototype | Production |
-|---|---|
-| FastAPI on localhost | Cloudflare Worker |
-| Images in `/uploads/` | Cloudflare R2 with presigned URLs |
-| Frontend served by FastAPI | Cloudflare Pages (separate deployment) |
-| `.env` file for secrets | Cloudflare Worker environment variables |
-| Localhost URLs for images | R2 presigned URLs (expire after ~1 hour) |
+Cloudflare Workers serve over HTTPS by default, so camera access works on all phones without any special configuration. No need for `chrome://flags` hacks or self-signed certificates.
 
 ### Cloudflare Pricing
 
-Free tier covers this use case entirely: Pages (unlimited sites), Workers (100k requests/day), R2 (10GB storage, 10M reads/month, 1M writes/month, zero egress). If scaling: Workers Pro = $5/month for 10M requests, R2 beyond free = $0.015/GB/month storage. Zero egress on R2 is critical since Airtable downloads every image.
+Free tier covers this use case entirely: Workers (100k requests/day), R2 (10GB storage, 10M reads/month, 1M writes/month, zero egress). If scaling: Workers Pro = $5/month for 10M requests, R2 beyond free = $0.015/GB/month storage. Zero egress on R2 is critical since Airtable downloads every image.
 
 ---
 
@@ -468,20 +443,22 @@ Free tier covers this use case entirely: Pages (unlimited sites), Workers (100k 
 
 This section exists so that future engineers and LLM instances understand *why* things are the way they are. These decisions were made through deliberate back-and-forth discussion and should not be changed without understanding the reasoning.
 
-## Why Gemini Flash
+## Why Gemini Flash Lite
 
 **Rejected alternatives and why:**
 
 - **Claude / GPT-4o:** More expensive for no quality gain on this specific task. The extraction is straightforward (read text off a package, identify a price tag) — it doesn't need frontier-model reasoning. Jonathan also pushed back on the initial recommendation of Claude Vision due to potential bias toward Anthropic's own products, which led to an open evaluation of all options.
+- **Gemini 2.0 Flash (full):** Overkill for this task. Flash Lite (`gemini-flash-lite-latest`) handles the extraction just as well at lower cost. The task is reading text and prices from product photos — doesn't need the extra capability of full Flash.
 - **Open-source OCR (Tesseract, PaddleOCR):** These only extract raw text. They cannot understand context — which text is the brand vs the flavor vs the ingredients. They cannot judge whether a product is a single bag or a multi-pack. They cannot identify which of several price tags belongs to which product. The extraction task requires multimodal understanding, not just character recognition.
-- **Why Gemini Flash wins:** Multimodal (understands images natively), structured output mode (guaranteed valid JSON — no parsing failures), extremely cheap (~$0.0001/photo, 50 photos for half a penny). The structured output mode is the key differentiator — instead of hoping the model formats its response correctly, you tell the API "respond as JSON matching this exact schema" and Gemini enforces it at the model level.
+- **Why Gemini Flash Lite wins:** Multimodal (understands images natively), structured output mode (guaranteed valid JSON — no parsing failures), extremely cheap (~$0.0001/photo, 50 photos for half a penny). The structured output mode is the key differentiator — instead of hoping the model formats its response correctly, you tell the API "respond as JSON matching this exact schema" and Gemini enforces it at the model level.
 
 ## Why Cloudflare
 
 **Rejected alternatives and why:**
 
 - **Vercel / AWS / Supabase:** All charge egress fees. Since Airtable downloads every image from our storage, egress costs would add up. R2's zero egress is the deciding factor.
-- **Why Cloudflare wins:** R2 has zero egress fees. Pages + Workers + R2 are all in one ecosystem. Free tier covers the entire use case. Simple to deploy and manage.
+- **Local FastAPI prototype first:** Considered and rejected — going straight to Cloudflare Workers avoids the complexity of maintaining two deployment targets and translating Python services to Worker-compatible code later. The Worker runtime is production from day one.
+- **Why Cloudflare wins:** R2 has zero egress fees. Workers + R2 are in one ecosystem. Free tier covers the entire use case. HTTPS out of the box (critical for camera access on phones). Already deployed at `shelftagdev.jonathankim829.workers.dev`.
 
 ## Why No Image Compression
 
@@ -490,7 +467,7 @@ This was explicitly debated and decided:
 - JPEG compression is lossy and irreversible — you cannot "decompress" a JPEG to get the original quality back. (Jonathan initially suggested compressing for upload then "decompressing" on the backend — this was clarified as not possible.)
 - Accuracy of AI extraction is the priority. A lower-quality image risks the model misreading a price tag, misspelling a brand name, or failing to identify multi-pack details.
 - Compression will ONLY be revisited if upload speeds become a real problem in practice.
-- If revisited: an empirical quality sweep must be run first — test Gemini Flash extraction accuracy at various resolutions and JPEG quality levels before locking in any settings. Do NOT sacrifice extraction quality to save storage or bandwidth.
+- If revisited: an empirical quality sweep must be run first — test Gemini Flash Lite extraction accuracy at various resolutions and JPEG quality levels before locking in any settings. Do NOT sacrifice extraction quality to save storage or bandwidth.
 
 ## Why Vanilla JS
 
@@ -512,9 +489,7 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 # Known Quirks & Edge Cases
 
-**Python 3.14 breaks pydantic-core:** As of this writing, `pydantic-core` (a compiled dependency of Pydantic, which FastAPI depends on) fails to build on Python 3.14. Always use Python 3.10–3.13. The project is developed and tested on 3.13.x. Use a venv (`py -3.13 -m venv .venv`) to isolate from any system-level 3.14 installation.
-
-**"IMage" column typo:** The Airtable column is literally named "IMage" (capital M). The team is aware and will fix it. Until then, code uses "IMage" to match. When they rename it to "Image", the code must be updated in `airtable_service.py`.
+**"IMage" column typo:** The Airtable column is literally named "IMage" (capital M). The team is aware and will fix it. Until then, code uses "IMage" to match. When they rename it to "Image", the code must be updated in the Airtable service.
 
 **"FX NW oz" column purpose unknown:** Currently duplicates the NW oz value. The team will clarify what this column is actually for. Code copies NW oz into it for now.
 
@@ -524,21 +499,39 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Airtable "overview" rows:** Some existing rows in the Airtable (rows 1, 6, 16 in screenshots) appear to be section headers, not product entries. The app should not create these — they're manually managed.
 
-**Airtable image download timing:** When the backend creates a record with an image URL, Airtable asynchronously downloads the image. R2 presigned URLs are set to expire after ~1 hour, which is more than enough time for Airtable to fetch the image.
+**Airtable image download timing:** When the Worker creates a record with an image URL, Airtable asynchronously downloads the image. The image URL is served by the Worker from R2, so it persists indefinitely (no presigned URL expiry concern for now).
 
-**Service worker update behavior:** When new code is deployed, the service worker detects changes on the next app open and downloads updated files. However, the new version doesn't activate until the user closes and reopens the app (this is standard service worker lifecycle behavior). If a user reports they're on an old version, tell them to fully close and reopen.
+**Service worker update behavior:** When new code is deployed to Cloudflare, the service worker detects changes on the next app open and downloads updated files. However, the new version doesn't activate until the user closes and reopens the app (this is standard service worker lifecycle behavior). If a user reports they're on an old version, tell them to fully close and reopen. When debugging CSS or JS changes, always bump the `CACHE_VERSION` in `sw.js` to force cache invalidation.
+
+**Airtable PAT truncation:** Airtable PATs are long (60+ characters). If `wrangler secret put AIRTABLE_PAT` results in 401 errors, the token was likely pasted incorrectly or truncated. Regenerate at airtable.com/create/tokens and re-enter.
+
+**IndexedDB stuck photos:** If the app is closed mid-upload (user locks phone, browser kills tab), photos get stuck as 'syncing' in IndexedDB and never clear. The sync module calls `resetStuckPhotos()` at the start of each cycle to recover these. Photos that fail 5 times are auto-deleted. When debugging, clearing site data on the phone flushes the entire IndexedDB.
+
+**Gemini returns nulls for non-product photos:** This is correct behavior. The extraction prompt says "if you cannot determine a field, set it to null." When tested with photos of fingers, Gemini correctly returned all nulls. Real snack product photos with visible packaging and price tags will populate the fields.
+
+**R2 custom metadata:** Each image stored in R2 includes custom metadata (user_name, retailer, timestamp, lat/lon) for debugging. This is separate from the Airtable record — if Airtable creation fails, the metadata is still recoverable from R2.
+
+**Sync badge behavior:** The badge counts only 'pending' photos (not 'syncing'). This means the count drops the moment upload begins, matching what appears in Cloudflare. Badge is always visible: green "0" when all synced, red with count when photos are waiting, orange pulse when actively uploading.
+
+**Phone → Worker → IndexedDB deletion policy:** Photos are deleted from IndexedDB as soon as the Worker returns ANY HTTP response (even if Gemini or Airtable failed downstream). The image is safely in R2 at that point. Only true network failures (no response received) keep the photo for retry. This prevents the infinite re-upload loop that occurs when Airtable is misconfigured.
 
 ---
 
 # Open Items / TODOs
 
-- [ ] Airtable PAT generation (scopes: `data.records:write`, `data.records:read`)
-- [ ] Gemini Flash API key (from Google AI Studio)
-- [ ] Cloudflare account setup (for production deployment)
+- [x] Cloudflare Workers deployment (`shelftagdev.jonathankim829.workers.dev`)
+- [x] Gemini Flash Lite API key — set via `wrangler secret put GEMINI_API_KEY`, confirmed working
+- [x] R2 bucket created (`shelftag-images`) and bound to Worker as `IMAGES`, confirmed uploading images
+- [x] Full backend pipeline deployed: `src/worker.js` (R2 storage → Gemini Flash Lite → Airtable)
+- [x] R2 custom metadata attached to images (user_name, retailer, timestamp, GPS coords)
+- [x] Phone → R2 upload confirmed working (images appear in Cloudflare dashboard)
+- [x] Gemini extraction confirmed working (returns structured JSON, nulls for non-product photos)
+- [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
+- [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
 - [ ] Custom domain setup (e.g. `shelftag.180snacks.com`)
 - [ ] Extraction prompt iteration with real store photos (especially multi-packs, obscured price tags)
 - [ ] Image compression quality sweep (ONLY if upload speeds become a problem — run accuracy tests first)
 - [ ] Reverse geocoding for exact country → currency mapping (production improvement)
 - [ ] Clarify "FX NW oz" column purpose with the team
-- [ ] Wait for team to rename "IMage" column to "Image", then update `airtable_service.py`
+- [ ] Wait for team to rename "IMage" column to "Image", then update Airtable service
 - [ ] Review 180 Snacks' Deacom contract for any restrictive automation clauses (low risk, but prudent)

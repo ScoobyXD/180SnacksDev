@@ -16,12 +16,12 @@
  * - This happens automatically — no user action needed
  * 
  * NOTE: The service worker MUST be served from the root path (/) to control
- * the entire app scope. Cloudflare Pages serves it from root automatically.
+ * the entire app scope. Cloudflare Workers serves it from root automatically.
  */
 
 // Cache version — bump this when you deploy new frontend code
 // The service worker will detect the change and re-cache everything
-const CACHE_VERSION = 'shelftag-v1';
+const CACHE_VERSION = 'shelftag-v6';
 
 // Files to cache for offline use
 // These are ALL the files the app needs to function without a network

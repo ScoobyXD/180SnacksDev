@@ -11,14 +11,6 @@
  *    - Full resolution JPEG images (2-5 MB each)
  *    - Associated metadata (user, retailer, timestamp, geolocation)
  *    - Sync status (pending / synced / failed)
- * 
- * IndexedDB can store gigabytes of data (typically 50% of free disk space).
- * At ~3-5 MB per photo, even 50 photos only uses ~150-250 MB.
- * See Context.md for capacity analysis.
- * 
- * Photos are stored in IndexedDB when captured (even if online), then synced
- * to the backend when connectivity is available. This ensures no photos are
- * ever lost due to network issues.
  */
 
 const DB_NAME = 'shelftag-180snacks';
@@ -31,31 +23,19 @@ let db = null;
 // IndexedDB SETUP
 // ============================================================================
 
-/**
- * Open (or create) the IndexedDB database.
- * Call this once on app startup.
- * 
- * @returns {IDBDatabase} The database connection
- */
 export async function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        // Called when the database is first created or version changes
         request.onupgradeneeded = (event) => {
             const database = event.target.result;
-
-            // Create the photos object store if it doesn't exist
             if (!database.objectStoreNames.contains(STORE_NAME)) {
                 const store = database.createObjectStore(STORE_NAME, {
                     keyPath: 'id',
                     autoIncrement: true
                 });
-
-                // Index on sync status so we can quickly query "all pending photos"
                 store.createIndex('status', 'status', { unique: false });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
-
                 console.log('[Storage] IndexedDB store created');
             }
         };
@@ -78,14 +58,6 @@ export async function initDB() {
 // PHOTO QUEUE OPERATIONS (IndexedDB)
 // ============================================================================
 
-/**
- * Save a captured photo to the local queue.
- * Called immediately after each photo capture, regardless of connectivity.
- * 
- * @param {string} imageBase64 - Full resolution base64 JPEG data
- * @param {object} metadata - { user_name, retailer, timestamp, latitude, longitude }
- * @returns {number} The auto-generated ID of the queued photo
- */
 export async function queuePhoto(imageBase64, metadata) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -94,7 +66,7 @@ export async function queuePhoto(imageBase64, metadata) {
         const record = {
             image_base64: imageBase64,
             metadata: metadata,
-            status: 'pending',      // pending → syncing → synced | failed
+            status: 'pending',
             created_at: new Date().toISOString(),
             sync_attempts: 0,
             last_error: null,
@@ -116,11 +88,6 @@ export async function queuePhoto(imageBase64, metadata) {
 }
 
 
-/**
- * Get all photos with 'pending' status (ready to sync).
- * 
- * @returns {Array} Array of photo records with id, image_base64, metadata, status
- */
 export async function getPendingPhotos() {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -138,13 +105,6 @@ export async function getPendingPhotos() {
 }
 
 
-/**
- * Update a photo's sync status.
- * 
- * @param {number} id - The photo record ID
- * @param {string} status - New status: 'syncing', 'synced', or 'failed'
- * @param {string|null} error - Error message if status is 'failed'
- */
 export async function updatePhotoStatus(id, status, error = null) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -177,12 +137,6 @@ export async function updatePhotoStatus(id, status, error = null) {
 }
 
 
-/**
- * Delete a synced photo to free up IndexedDB space.
- * Only call this after confirming the photo was successfully synced to Airtable.
- * 
- * @param {number} id - The photo record ID to delete
- */
 export async function deleteSyncedPhoto(id) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -200,10 +154,92 @@ export async function deleteSyncedPhoto(id) {
 
 
 /**
- * Get the count of photos by status (for UI display).
+ * Reset photos stuck in 'syncing' or 'failed' status back to 'pending'.
  * 
- * @returns {object} { pending: N, syncing: N, synced: N, failed: N }
+ * If the app closes mid-upload, photos get stuck as 'syncing' forever.
+ * Failed photos are retried up to 5 times, then deleted.
  */
+export async function resetStuckPhotos() {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+            let resetCount = 0;
+
+            for (const record of request.result) {
+                let needsReset = false;
+
+                if (record.status === 'syncing') {
+                    needsReset = true;
+                }
+
+                if (record.status === 'failed') {
+                    if (record.sync_attempts < 5) {
+                        needsReset = true;
+                    } else {
+                        console.warn(`[Storage] Photo #${record.id} failed ${record.sync_attempts} times, deleting`);
+                        store.delete(record.id);
+                    }
+                }
+
+                if (needsReset) {
+                    record.status = 'pending';
+                    store.put(record);
+                    resetCount++;
+                }
+            }
+
+            transaction.oncomplete = () => {
+                if (resetCount > 0) {
+                    console.log(`[Storage] Reset ${resetCount} stuck photos back to pending`);
+                }
+                resolve(resetCount);
+            };
+
+            transaction.onerror = () => reject(transaction.error);
+        };
+
+        request.onerror = () => reject(request.error);
+    });
+}
+
+
+/**
+ * Delete ALL photos from the local queue, regardless of status.
+ * Called from the "Clear Queue" button in the queue modal.
+ * 
+ * This is a nuclear option for when photos get stuck.
+ * Does NOT affect photos already uploaded to Airtable/R2.
+ * 
+ * @returns {number} Number of photos that were deleted
+ */
+export async function clearAllPhotos() {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+
+        // Count first so we can report how many were cleared
+        const countRequest = store.count();
+
+        countRequest.onsuccess = () => {
+            const count = countRequest.result;
+            const clearRequest = store.clear();
+
+            clearRequest.onsuccess = () => {
+                console.log(`[Storage] Cleared all ${count} photos from queue`);
+                resolve(count);
+            };
+
+            clearRequest.onerror = () => reject(clearRequest.error);
+        };
+
+        countRequest.onerror = () => reject(countRequest.error);
+    });
+}
+
+
 export async function getQueueStats() {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -227,38 +263,18 @@ export async function getQueueStats() {
 // USER PREFERENCES (localStorage)
 // ============================================================================
 
-/**
- * Save user name to localStorage.
- * Persists across sessions, browser restarts, and phone reboots.
- * 
- * @param {string} name - User's name
- */
 export function saveUserName(name) {
     localStorage.setItem('shelftag_user_name', name);
 }
 
-/**
- * Get saved user name, or empty string if not set.
- * @returns {string}
- */
 export function getUserName() {
     return localStorage.getItem('shelftag_user_name') || '';
 }
 
-/**
- * Save retailer name to localStorage.
- * Persists across sessions — user doesn't have to re-type it each visit.
- * 
- * @param {string} retailer - Retail store name
- */
 export function saveRetailer(retailer) {
     localStorage.setItem('shelftag_retailer', retailer);
 }
 
-/**
- * Get saved retailer name, or empty string if not set.
- * @returns {string}
- */
 export function getRetailer() {
     return localStorage.getItem('shelftag_retailer') || '';
 }

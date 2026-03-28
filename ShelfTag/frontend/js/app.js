@@ -207,18 +207,25 @@ function formatTimestamp(date) {
 
 /**
  * Update the sync badge showing pending photo count.
+ * 
+ * Only counts 'pending' (not 'syncing') so the badge drops
+ * the moment upload starts — matching what the user sees in Cloudflare.
+ * Always visible: green "0" when clear, red with count when pending.
  */
 function updateSyncBadge(stats) {
     const badge = document.getElementById('sync-badge');
-    const count = stats.pending + stats.syncing;
+    const count = stats.pending;
+
+    badge.textContent = count;
+
+    // Remove all state classes
+    badge.classList.remove('pending', 'syncing');
 
     if (count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
-        badge.classList.toggle('syncing', stats.syncing > 0);
-    } else {
-        badge.classList.add('hidden');
+        // Has pending photos — red or orange (if actively syncing)
+        badge.classList.add(stats.syncing > 0 ? 'syncing' : 'pending');
     }
+    // else: no classes = green (default in CSS)
 }
 
 /**

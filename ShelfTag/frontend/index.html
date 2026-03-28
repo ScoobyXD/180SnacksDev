@@ -26,7 +26,6 @@
 
     <!-- ================================================================== -->
     <!-- CAMERA VIEWFINDER                                                   -->
-    <!-- Full-screen live camera feed — the main UI of the app               -->
     <!-- ================================================================== -->
     <div id="camera-container">
         <video id="viewfinder" autoplay playsinline muted></video>
@@ -34,13 +33,11 @@
 
     <!-- ================================================================== -->
     <!-- FLASH OVERLAY                                                       -->
-    <!-- Brief white flash when a photo is captured (visual feedback)         -->
     <!-- ================================================================== -->
     <div id="flash"></div>
 
     <!-- ================================================================== -->
     <!-- CONNECTIVITY INDICATOR                                              -->
-    <!-- Small green/red dot in the top-left showing online/offline status    -->
     <!-- ================================================================== -->
     <div id="connectivity">
         <div class="dot"></div>
@@ -48,30 +45,53 @@
     </div>
 
     <!-- ================================================================== -->
-    <!-- SYNC BADGE                                                          -->
-    <!-- Red badge in top-right showing number of photos waiting to sync     -->
-    <!-- Shows a number when photos are queued, hidden when queue is empty    -->
+    <!-- SYNC BADGE (tappable — opens queue modal)                           -->
     <!-- ================================================================== -->
     <div id="sync-badge" class="hidden">0</div>
 
     <!-- ================================================================== -->
+    <!-- QUEUE MODAL                                                         -->
+    <!-- Shown when sync badge is tapped. Shows stats + clear queue button.  -->
+    <!-- ================================================================== -->
+    <div id="queue-modal" class="hidden">
+        <div id="queue-modal-content">
+            <div id="queue-modal-header">
+                <span>Sync Queue</span>
+                <button id="queue-modal-close" aria-label="Close">✕</button>
+            </div>
+            <div id="queue-stats">
+                <div class="stat-row">
+                    <span>Pending</span>
+                    <span id="stat-pending">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>Uploading</span>
+                    <span id="stat-syncing">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>Failed</span>
+                    <span id="stat-failed">0</span>
+                </div>
+            </div>
+            <button id="clear-queue-btn">Clear Queue</button>
+            <p id="clear-queue-note">Removes all queued photos from this device.<br>Photos already in Airtable are not affected.</p>
+        </div>
+    </div>
+
+    <!-- ================================================================== -->
     <!-- TOAST                                                               -->
-    <!-- Brief notification at the top (e.g. "Photo captured!")               -->
     <!-- ================================================================== -->
     <div id="toast"></div>
 
     <!-- ================================================================== -->
     <!-- BOTTOM CONTROLS                                                     -->
-    <!-- Contains the shutter button (centered)                              -->
     <!-- ================================================================== -->
     <div id="controls">
         <button id="shutter-btn" aria-label="Take photo"></button>
     </div>
 
     <!-- ================================================================== -->
-    <!-- INFO BOX                                                            -->
-    <!-- Bottom-right: user name + retailer name                             -->
-    <!-- Tappable to edit. Values persist via localStorage.                   -->
+    <!-- INFO BOX (top of screen, side by side)                              -->
     <!-- ================================================================== -->
     <div id="info-box">
         <div class="input-group">
@@ -86,7 +106,6 @@
 
     <!-- ================================================================== -->
     <!-- ERROR SCREEN                                                        -->
-    <!-- Shown when camera permission is denied or camera is unavailable      -->
     <!-- ================================================================== -->
     <div id="error-screen" class="hidden">
         <div class="error-icon">📷</div>
@@ -94,14 +113,11 @@
     </div>
 
     <!-- ================================================================== -->
-    <!-- APP SCRIPTS (ES Modules)                                            -->
+    <!-- APP SCRIPTS                                                         -->
     <!-- ================================================================== -->
     <script type="module" src="/js/app.js"></script>
 
-    <!-- ================================================================== -->
-    <!-- CONNECTIVITY DETECTION (inline — no module dependency)               -->
-    <!-- Updates the green/red dot based on online/offline status             -->
-    <!-- ================================================================== -->
+    <!-- CONNECTIVITY DETECTION (inline) -->
     <script>
         function updateConnectivity() {
             const el = document.getElementById('connectivity');
