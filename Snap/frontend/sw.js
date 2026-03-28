@@ -16,7 +16,7 @@
  * - This happens automatically — no user action needed
  * 
  * NOTE: The service worker MUST be served from the root path (/) to control
- * the entire app scope. That's why main.py has a dedicated route for /sw.js.
+ * the entire app scope. Cloudflare Pages serves it from root automatically.
  */
 
 // Cache version — bump this when you deploy new frontend code
@@ -27,12 +27,12 @@ const CACHE_VERSION = 'snap-v1';
 // These are ALL the files the app needs to function without a network
 const CACHE_FILES = [
     '/',
-    '/static/css/styles.css',
-    '/static/js/app.js',
-    '/static/js/camera.js',
-    '/static/js/storage.js',
-    '/static/js/sync.js',
-    '/static/js/geo.js',
+    '/css/styles.css',
+    '/js/app.js',
+    '/js/camera.js',
+    '/js/storage.js',
+    '/js/sync.js',
+    '/js/geo.js',
     '/manifest.json',
 ];
 
@@ -90,13 +90,12 @@ self.addEventListener('activate', (event) => {
  * 
  * - App files (HTML, CSS, JS): Serve from cache, fast and offline-capable
  * - API calls (/api/*): Always go to network (these need real-time data)
- * - Image uploads (/uploads/*): Always go to network
  */
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     
-    // API calls and uploads should always go to network — never cache these
-    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) {
+    // API calls should always go to network — never cache these
+    if (url.pathname.startsWith('/api/')) {
         return; // Let the browser handle it normally (network request)
     }
     
