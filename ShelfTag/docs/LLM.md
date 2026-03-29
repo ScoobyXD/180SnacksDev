@@ -129,7 +129,7 @@ Phone (PWA)                    Backend (Cloudflare Worker)      External APIs
 ─────────────                  ─────────────────────────        ─────────────
 Camera capture                 storage_service
   ↓                              → stores image in R2
-IndexedDB queue                    → returns presigned URL
+IndexedDB queue                    → returns public R2 URL
   ↓ (when online)
 POST /api/sync                 gemini_service                  → Google Gemini Flash Lite
   ↓                              → sends image + prompt
@@ -166,11 +166,11 @@ Step by step, what happens when a user takes a photo:
 2. Photo + metadata (user name, retailer, timestamp MM/DD/YYYY HH:MM, GPS coords) stored in IndexedDB
 3. Sync module detects connectivity (`navigator.onLine` + Worker health check ping)
 4. When online: POST `{ image_base64, metadata }` to `/api/sync`
-5. Worker stores image in Cloudflare R2 → gets a presigned URL
+5. Worker stores image in Cloudflare R2 → constructs a public R2 URL
 6. Worker sends image to Gemini Flash Lite with extraction prompt → gets structured JSON
-7. Worker computes `RT/oz = Retail Regular / NW oz`
-8. Worker creates Airtable record via REST API with all fields + image URL
-9. Airtable downloads the image from the presigned URL and stores its own copy
+7. Worker creates Airtable record via REST API with all fields + image URL
+8. Airtable downloads the image from the public R2 URL and stores its own copy
+9. Airtable Formula fields (RT/oz, FX NW oz) compute automatically from the written data
 10. Worker responds success → frontend marks photo as synced → deletes local copy from IndexedDB
 
 ## Tech Stack
@@ -233,7 +233,7 @@ shelftag/
 | Service | File | Responsibility | External Dependency |
 |---|---|---|---|
 | Gemini Service | `gemini_service` | Image → structured product data | Google Gemini Flash Lite API |
-| Storage Service | `storage_service` | Image storage in R2 + presigned URL generation | Cloudflare R2 |
+| Storage Service | `storage_service` | Image storage in R2 + public URL construction | Cloudflare R2 |
 | Airtable Service | `airtable_service` | Record creation in Airtable | Airtable REST API |
 | Orchestrator | Cloudflare Worker | Routes, CORS, pipeline orchestration | Cloudflare Workers runtime |
 
@@ -243,8 +243,8 @@ shelftag/
 
 - **Personal Access Token (PAT):** generated at airtable.com/create/tokens
 - **Required scopes:** `data.records:write`, `data.records:read`
-- **Base ID:** `appb7454UmfsMhkaJ`
-- **Table ID:** `tblytCTkc8gfNMWh8`
+- **Base ID:** `app8EiNoHjPoOl7y0`
+- **Table ID:** `tblvy7IdKWweV8Jdj`
 - All stored as Cloudflare Worker environment variables (via `wrangler secret`) — NEVER in frontend code
 
 ### API
@@ -257,7 +257,7 @@ shelftag/
 |---|---|---|
 | **Flavor** | Gemini Flash Lite | Product/flavor name (e.g. "Serenity Trail Mix") |
 | **Date of Visit** | App metadata | MM/DD/YYYY format |
-| **IMage** | R2 URL | Photo attachment. **KNOWN TYPO** — should be "Image". Team is aware and will fix. Code uses "IMage" to match current column name. |
+| **Image** | R2 URL | Photo attachment |
 | **Retailer** | App metadata | User-entered store name from the app |
 | **Brand** | Gemini Flash Lite | Manufacturer (e.g. "Southern Grove", "Power Up") |
 | **Flavor Description** | Gemini Flash Lite | Comma-separated ingredients from package front |
@@ -265,10 +265,10 @@ shelftag/
 | **Type** | Gemini Flash Lite | One of: "Single Bag", "Multi Box", "Multi Bag" — visual judgment |
 | **NW oz** | Gemini Flash Lite | Total net weight in ounces (number). For multi-packs: count × per-unit weight. |
 | **Retail Regular** | Gemini Flash Lite | Shelf price (number, no dollar sign) |
-| **RT/oz** | Computed server-side | = Retail Regular / NW oz (rounded to 2 decimal places). If either value is null, RT/oz is null. |
+| **RT/oz** | Airtable Formula | = {Retail Regular} / {FX NW oz}. Computed automatically by Airtable — the Worker does NOT write to this field. |
 | **Notes** | Auto or blank | Blank unless outside US → auto-populated with currency info via geolocation |
 | **NW g** | Manual | User fills in Airtable (used for international products with gram-based weights) |
-| **FX NW oz** | Duplicated from NW oz | **Currently duplicates NW oz data.** Team will clarify intended purpose. For now, code copies NW oz value into this column. |
+| **FX NW oz** | Airtable Formula | = IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396). Computed automatically by Airtable — the Worker does NOT write to this field. |
 | **Category** | Manual | User fills in Airtable |
 
 ## Gemini Flash Lite Extraction
@@ -353,7 +353,7 @@ The app is designed for stores with poor or no connectivity:
 - API keys (Gemini, Airtable) are ONLY stored in Cloudflare Worker environment variables (set via `wrangler secret` or Cloudflare dashboard)
 - Frontend NEVER has direct access to any API key
 - Phone only talks to the Worker endpoint (`shelftagdev.jonathankim829.workers.dev`)
-- R2 presigned URLs expire after ~1 hour (just enough for Airtable to download the image)
+- R2 bucket is configured as **public** (`pub-a9ceafcd290c4d5eb643aeac5b4a67d1.r2.dev`). All stored images are accessible via direct URL. This is acceptable because the images are product shelf photos (not sensitive data). If privacy requirements change, switch to presigned URLs with expiry.
 - `.env` files are for local development reference only and are git-ignored
 
 ## Prerequisites & Deployment
@@ -489,9 +489,7 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 # Known Quirks & Edge Cases
 
-**"IMage" column typo:** The Airtable column is literally named "IMage" (capital M). The team is aware and will fix it. Until then, code uses "IMage" to match. When they rename it to "Image", the code must be updated in the Airtable service.
-
-**"FX NW oz" column purpose unknown:** Currently duplicates the NW oz value. The team will clarify what this column is actually for. Code copies NW oz into it for now.
+**"FX NW oz" is a Formula field:** FX NW oz is an Airtable Formula column: `IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396)`. It normalizes weight to ounces whether the source value is in oz or grams. The Worker does not write to this field.
 
 **iPhone + Chrome PWA limitation:** Chrome on iOS has limited `getUserMedia` support for PWAs. Field reps using iPhones should use Safari.
 
@@ -499,7 +497,7 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Airtable "overview" rows:** Some existing rows in the Airtable (rows 1, 6, 16 in screenshots) appear to be section headers, not product entries. The app should not create these — they're manually managed.
 
-**Airtable image download timing:** When the Worker creates a record with an image URL, Airtable asynchronously downloads the image. The image URL is served by the Worker from R2, so it persists indefinitely (no presigned URL expiry concern for now).
+**Airtable image download timing:** When the Worker creates a record with an image URL, Airtable asynchronously downloads the image from the public R2 bucket. Since the bucket is public, there is no URL expiry concern — images persist indefinitely.
 
 **Service worker update behavior:** When new code is deployed to Cloudflare, the service worker detects changes on the next app open and downloads updated files. However, the new version doesn't activate until the user closes and reopens the app (this is standard service worker lifecycle behavior). If a user reports they're on an old version, tell them to fully close and reopen. When debugging CSS or JS changes, always bump the `CACHE_VERSION` in `sw.js` to force cache invalidation.
 
@@ -532,6 +530,6 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [ ] Extraction prompt iteration with real store photos (especially multi-packs, obscured price tags)
 - [ ] Image compression quality sweep (ONLY if upload speeds become a problem — run accuracy tests first)
 - [ ] Reverse geocoding for exact country → currency mapping (production improvement)
-- [ ] Clarify "FX NW oz" column purpose with the team
-- [ ] Wait for team to rename "IMage" column to "Image", then update Airtable service
+- [x] Clarify "FX NW oz" column purpose — it's an Airtable Formula: `IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396)`
+- [x] "IMage" column renamed to "Image" — code already updated
 - [ ] Review 180 Snacks' Deacom contract for any restrictive automation clauses (low risk, but prudent)
