@@ -2,7 +2,7 @@
  * ShelfTag — Camera PWA Styles
  * =========================
  * Font: SF Pro Text (Apple system font via -apple-system)
- * Labels use: 9px, weight 600, uppercase, 0.8px letter-spacing
+ * Labels: 9px, weight 600, uppercase, 0.8px letter-spacing
  */
 
 /* ---- Reset & Base ---- */
@@ -43,6 +43,36 @@ html, body {
 }
 
 
+/* ---- Focus Ring (tap-to-focus) ---- */
+/*
+ * iOS-style yellow square that appears at the tap point.
+ * Animation: appears at 1.3× scale, contracts, holds, fades out.
+ */
+#focus-ring {
+    position: fixed;
+    width: 72px;
+    height: 72px;
+    border: 2px solid #ffd60a;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 80;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+#focus-ring.active {
+    animation: focus-animate 1.2s ease-out forwards;
+}
+
+@keyframes focus-animate {
+    0%   { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+    20%  { opacity: 1; transform: translate(-50%, -50%) scale(0.95); }
+    40%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+    70%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+}
+
+
 /* ---- Flash Overlay ---- */
 #flash {
     position: fixed;
@@ -63,18 +93,73 @@ html, body {
 
 
 /* ---- Bottom Controls Bar ---- */
+/*
+ * Three-column flex row:
+ *   [spacer]  [shutter button]  [zoom indicator]
+ * Left spacer and right container are equal width so shutter stays centered.
+ */
 #controls {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
     padding: 24px 16px;
     padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     z-index: 50;
     background: linear-gradient(transparent, rgba(0,0,0,0.6));
+}
+
+/* Left spacer — matches the width of the right container */
+.controls-spacer {
+    flex: 1;
+}
+
+/* Right container — holds zoom indicator, same flex as spacer to keep shutter centered */
+.controls-right {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+
+/* ---- Zoom Level Indicator ---- */
+/*
+ * Bottom-right, same row as shutter button.
+ * Shows "1.0×", "2.5×" etc.
+ * Turns yellow when zoomed in — tap to reset to 1×.
+ * Hidden on devices that don't support zoom.
+ */
+#zoom-indicator {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    min-width: 52px;
+    height: 32px;
+    line-height: 32px;
+    text-align: center;
+    border-radius: 16px;
+    padding: 0 12px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+#zoom-indicator.hidden {
+    visibility: hidden;
+}
+
+#zoom-indicator.zoomed {
+    background: rgba(255, 214, 10, 0.85);
+    color: #000;
+}
+
+#zoom-indicator:active {
+    transform: scale(0.92);
 }
 
 
@@ -89,7 +174,6 @@ html, body {
     position: relative;
     flex-shrink: 0;
     transition: transform 0.1s ease;
-    -webkit-tap-highlight-color: transparent;
 }
 
 #shutter-btn::after {
@@ -114,16 +198,7 @@ html, body {
 }
 
 
-/* ---- Top Bar Layout ---- */
-/*
- * All top-of-screen elements share the same vertical position.
- * Left: connectivity indicator
- * Center: info box (Name + Retailer side by side)
- * Right: sync badge
- * All at z-index 55-60 so they layer correctly.
- */
-
-/* ---- Connectivity Indicator ---- */
+/* ---- Connectivity Indicator (top-left) ---- */
 #connectivity {
     position: fixed;
     top: calc(14px + env(safe-area-inset-top, 0px));
@@ -150,15 +225,10 @@ html, body {
 }
 
 
-/* ---- Info Box (User Name + Retailer) ---- */
-/*
- * Squeezed between connectivity (left) and sync badge (right)
- * on the same top row. Name and Retailer side by side.
- */
+/* ---- Info Box (top center, Name + Retailer) ---- */
 #info-box {
     position: fixed;
     top: calc(8px + env(safe-area-inset-top, 0px));
-    /* Leave room for Online indicator on left (~70px) and sync badge on right (~50px) */
     left: 72px;
     right: 52px;
     background: rgba(0, 0, 0, 0.55);
@@ -175,10 +245,6 @@ html, body {
 #info-box .input-group {
     flex: 1;
     min-width: 0;
-}
-
-#info-box .input-group + .input-group {
-    margin-top: 0;
 }
 
 #info-box label {
@@ -207,7 +273,6 @@ html, body {
     caret-color: #4af;
     user-select: text;
     -webkit-user-select: text;
-    /* Truncate long text */
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
@@ -224,10 +289,7 @@ html, body {
 }
 
 
-/* ---- Sync Badge ---- */
-/*
- * Always visible. Red with count when pending, green "0" when all synced.
- */
+/* ---- Sync Badge (top-right) ---- */
 #sync-badge {
     position: fixed;
     top: calc(14px + env(safe-area-inset-top, 0px));
@@ -242,17 +304,15 @@ html, body {
     border-radius: 13px;
     padding: 0 8px;
     z-index: 60;
+    cursor: pointer;
     transition: background 0.3s ease;
-    /* Default: green (all synced) */
     background: #34c759;
 }
 
-/* When there are pending photos */
 #sync-badge.pending {
     background: #ff3b30;
 }
 
-/* Pulsing when actively uploading */
 #sync-badge.syncing {
     animation: pulse 1.2s ease-in-out infinite;
     background: #ff9500;
@@ -261,6 +321,100 @@ html, body {
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+}
+
+
+/* ---- Queue Modal ---- */
+#queue-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#queue-modal.hidden {
+    display: none;
+}
+
+#queue-modal-content {
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    padding: 20px;
+    width: 280px;
+    max-width: 90%;
+}
+
+#queue-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+#queue-modal-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+#queue-stats {
+    margin-bottom: 16px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 15px;
+}
+
+.stat-row:last-child {
+    border-bottom: none;
+}
+
+.stat-row span:last-child {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+#clear-queue-btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: 8px;
+}
+
+#clear-queue-btn:active {
+    opacity: 0.7;
+}
+
+#clear-queue-note {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+    line-height: 1.4;
 }
 
 

@@ -1,49 +1,52 @@
 /**
  * ShelfTag — Camera Module
  * ====================
- * Handles the smartphone camera functionality:
+ * Handles the smartphone camera:
  * - Requesting camera permission via getUserMedia API
  * - Displaying the live viewfinder
- * - Capturing photos at full resolution
- * - Returning photos as base64-encoded JPEG data
+ * - Capturing photos at full resolution (no compression)
+ * - Pinch-to-zoom with hardware zoom control
+ * - Tap-to-focus with visual feedback + hardware focus (where supported)
  * 
- * The camera uses the rear-facing camera by default (facingMode: "environment")
- * since users are photographing products on shelves, not taking selfies.
- * 
- * No compression is applied — full resolution images are captured.
- * Compression will only be added if upload speeds become a problem (see Context.md).
+ * Uses rear-facing camera (facingMode: "environment") for product photography.
  */
+
+// ============================================================================
+// ZOOM STATE
+// ============================================================================
+
+let zoomCapabilities = null;  // { min, max, step } or null if unsupported
+let currentZoom = 1;
+let activeTrack = null;       // Reference to the active video track
+
+
+// ============================================================================
+// CAMERA INITIALIZATION
+// ============================================================================
 
 /**
  * Initialize the camera and start the live viewfinder.
- * 
- * @param {HTMLVideoElement} videoElement - The <video> element to display the viewfinder in
- * @returns {MediaStream} The active camera stream (needed for cleanup)
- * @throws {Error} If camera permission is denied or unavailable
+ * Also detects zoom/focus capabilities for the active camera.
  */
 export async function initCamera(videoElement) {
     try {
-        // Request the rear camera at the highest available resolution
-        // "environment" = rear camera on phones (for photographing products)
-        // "user" = front camera (selfie camera — not what we want)
         const stream = await navigator.mediaDevices.getUserMedia({
             video: {
                 facingMode: { ideal: "environment" },
-                width: { ideal: 4096 },   // Request highest resolution available
-                height: { ideal: 2160 },  // The browser will give the closest match
+                width: { ideal: 4096 },
+                height: { ideal: 2160 },
             },
-            audio: false // No audio needed
+            audio: false
         });
 
         videoElement.srcObject = stream;
         await videoElement.play();
 
-        console.log('[Camera] Initialized successfully');
-        
-        // Log the actual resolution we got
-        const track = stream.getVideoTracks()[0];
-        const settings = track.getSettings();
-        console.log(`[Camera] Resolution: ${settings.width}x${settings.height}`);
+        activeTrack = stream.getVideoTracks()[0];
+        const settings = activeTrack.getSettings();
+        console.log(`[Camera] Initialized: ${settings.width}x${settings.height}`);
+
+        detectZoomCapabilities();
 
         return stream;
 
@@ -59,31 +62,117 @@ export async function initCamera(videoElement) {
 }
 
 
+// ============================================================================
+// ZOOM
+// ============================================================================
+
+function detectZoomCapabilities() {
+    if (!activeTrack) return;
+
+    try {
+        const capabilities = activeTrack.getCapabilities?.();
+        if (capabilities?.zoom) {
+            zoomCapabilities = {
+                min: capabilities.zoom.min,
+                max: capabilities.zoom.max,
+                step: capabilities.zoom.step || 0.1,
+            };
+            currentZoom = activeTrack.getSettings?.()?.zoom || 1;
+            console.log(`[Camera] Zoom range: ${zoomCapabilities.min} – ${zoomCapabilities.max} (current: ${currentZoom})`);
+        } else {
+            console.log('[Camera] Zoom not supported on this device/browser');
+        }
+    } catch (e) {
+        console.warn('[Camera] Could not detect zoom capabilities:', e.message);
+    }
+}
+
+export function getZoomCapabilities() {
+    return zoomCapabilities;
+}
+
+export function getCurrentZoom() {
+    return currentZoom;
+}
+
 /**
- * Capture a photo from the live viewfinder.
+ * Set the camera zoom to a specific level (clamped to hardware range).
+ */
+export async function setZoom(level) {
+    if (!zoomCapabilities || !activeTrack) return currentZoom;
+
+    const clamped = Math.min(Math.max(level, zoomCapabilities.min), zoomCapabilities.max);
+
+    try {
+        await activeTrack.applyConstraints({ advanced: [{ zoom: clamped }] });
+        currentZoom = clamped;
+    } catch (e) {
+        console.warn('[Camera] Failed to set zoom:', e.message);
+    }
+
+    return currentZoom;
+}
+
+/**
+ * Reset zoom to 1.0×.
+ */
+export async function resetZoom() {
+    if (!zoomCapabilities) return currentZoom;
+    return setZoom(1.0);
+}
+
+
+// ============================================================================
+// FOCUS
+// ============================================================================
+
+/**
+ * Attempt to trigger a refocus cycle.
  * 
- * Takes the current frame from the video element, draws it onto a canvas
- * at full resolution, and exports it as a base64 JPEG string.
- * 
- * NO COMPRESSION is applied. The image is exported at maximum JPEG quality (1.0).
- * See Context.md — compression is deferred until proven necessary.
- * 
- * @param {HTMLVideoElement} videoElement - The video element with the live camera feed
- * @returns {string} Base64-encoded JPEG image data (without the data:image/jpeg;base64, prefix)
+ * Toggles focusMode between manual and continuous to force the camera
+ * to re-evaluate focus. Visual focus ring is handled by app.js.
+ * True point-of-interest focus requires ImageCapture API (Safari doesn't support it).
+ */
+export async function tapToFocus(x, y) {
+    if (!activeTrack) return false;
+
+    try {
+        const capabilities = activeTrack.getCapabilities?.() || {};
+
+        if (capabilities.focusMode) {
+            const modes = capabilities.focusMode;
+            if (modes.includes('manual') && modes.includes('continuous')) {
+                await activeTrack.applyConstraints({ advanced: [{ focusMode: 'manual' }] });
+                await new Promise(r => setTimeout(r, 100));
+                await activeTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                console.log('[Camera] Hardware refocus triggered');
+                return true;
+            }
+        }
+    } catch (e) {
+        console.log('[Camera] Hardware focus not available:', e.message);
+    }
+
+    return false;
+}
+
+
+// ============================================================================
+// PHOTO CAPTURE
+// ============================================================================
+
+/**
+ * Capture current frame at full resolution. No compression applied.
+ * Returns base64 JPEG without the data URL prefix.
  */
 export function capturePhoto(videoElement) {
-    // Create a canvas at the exact resolution of the video feed
     const canvas = document.createElement('canvas');
     canvas.width = videoElement.videoWidth;
     canvas.height = videoElement.videoHeight;
 
-    // Draw the current video frame onto the canvas
     const ctx = canvas.getContext('2d');
     ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-    // Export as JPEG at maximum quality (1.0 = no quality loss)
-    // The "data:image/jpeg;base64," prefix is stripped because the backend
-    // expects raw base64 data without the data URL prefix
     const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
     const base64Data = dataUrl.split(',')[1];
 
@@ -93,15 +182,16 @@ export function capturePhoto(videoElement) {
 }
 
 
-/**
- * Stop the camera stream and release the hardware.
- * Call this when the user navigates away or the app is backgrounded.
- * 
- * @param {MediaStream} stream - The stream returned by initCamera()
- */
+// ============================================================================
+// CLEANUP
+// ============================================================================
+
 export function stopCamera(stream) {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
+        activeTrack = null;
+        zoomCapabilities = null;
+        currentZoom = 1;
         console.log('[Camera] Stream stopped');
     }
 }

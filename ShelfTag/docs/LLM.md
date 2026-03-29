@@ -148,15 +148,18 @@ Deployed at: shelftagdev.jonathankim829.workers.dev
 ### UI Spec
 
 - Fullscreen camera viewfinder (looks exactly like the native phone camera)
-- Bottom-right corner: small semi-transparent box with two fields — user's name and retailer name
+- Top bar: small semi-transparent box with two fields — user's name and retailer name
 - These fields persist via localStorage (survive app close, phone restart, etc.)
 - First time opening: fields are empty, user taps to type
 - Subsequent opens: fields are pre-filled from last session
 - Large circular shutter button centered at the bottom
-- Red sync badge (top-right) shows count of photos waiting to upload
+- Red sync badge (top-right) shows count of photos waiting to upload. Tappable — opens queue modal with stats and "Clear Queue" button.
 - Green/red connectivity dot (top-left) shows online/offline status
 - Camera flash effect on capture for visual feedback
 - Toast notification ("Photo captured!") on successful capture
+- **Pinch-to-zoom** on the viewfinder: uses hardware zoom via `MediaStreamTrack.applyConstraints()`. Zoom level indicator appears bottom-right, on the same horizontal axis as the shutter button (e.g. "2.5×"). Turns yellow when zoomed — tap to reset to 1×. Hidden on devices that don't support zoom.
+- **Tap-to-focus** on the viewfinder: shows a yellow square focus ring (iOS camera style) at the tap point. Attempts hardware refocus via `focusMode` constraint toggle. Visual feedback works on all devices; hardware focus is best-effort.
+- Gesture discrimination: single brief tap = focus, two-finger pinch = zoom. Taps on UI elements (inputs, buttons, badges) pass through normally.
 
 ## Data Flow
 
@@ -330,6 +333,18 @@ The app is designed for stores with poor or no connectivity:
 4. When online, sync module drains the queue **sequentially** (one photo at a time to avoid overwhelming the Worker).
 5. If connectivity drops mid-sync, it stops and retries when signal returns.
 6. A **30-second periodic retry** acts as a safety net.
+
+### Background Sync (iOS — unsolved)
+
+iOS Safari aggressively kills background PWA execution and **does NOT support the Background Sync API (SyncManager)**. There is no reliable way to upload photos from a PWA while the app is backgrounded on iOS.
+
+**What was tried and failed:**
+- `visibilitychange` → `hidden` flush: fires all pending uploads when the app goes to background. iOS suspends the PWA before uploads complete.
+- Background Sync API (`SyncManager`): not implemented in Safari at all.
+
+**Current approach:** Foreground-only uploads with aggressive retry. When the app returns to foreground, sync resumes immediately. The 30-second periodic timer and `online` event provide additional coverage. Photos queue safely in IndexedDB until the user reopens the app.
+
+**For guaranteed background uploads:** A native app wrapper (WKWebView + URLSession background download/upload tasks) would be needed. This is tracked as an open item.
 
 ## Currency Detection via Geolocation
 
@@ -513,6 +528,12 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Phone → Worker → IndexedDB deletion policy:** Photos are deleted from IndexedDB as soon as the Worker returns ANY HTTP response (even if Gemini or Airtable failed downstream). The image is safely in R2 at that point. Only true network failures (no response received) keep the photo for retry. This prevents the infinite re-upload loop that occurs when Airtable is misconfigured.
 
+**Zoom values are raw hardware values, not Apple-style labels:** The zoom indicator shows the raw value from `MediaStreamTrack.getSettings().zoom`. On iPhones with ultra-wide lenses, hardware `1.0` is NOT the same as Apple's "1×" — Apple maps hardware `2.0` to their "1×". ShelfTag intentionally ignores this mapping and shows raw values. Reset always goes to hardware `1.0`. **LLM NOTE:** A previous iteration tried to reverse-engineer Apple's zoom mapping (`defaultZoom = 2.0`, `displayZoom = hardware / defaultZoom`) to match the native camera app's labels. This broke repeatedly because `applyConstraints({ zoom })` behaves inconsistently across iOS versions, and the mapping logic created confusing display values (e.g. "0.5×" when the user expected "1.0×"). The simple approach — raw hardware values, reset to 1.0 — is the correct choice. Do not re-add display zoom mapping.
+
+**Tap-to-focus is best-effort:** True point-of-interest focus (focus on exact tap location) requires the ImageCapture API, which Safari doesn't support. The current implementation toggles `focusMode` between 'manual' and 'continuous' to force a refocus cycle. This works on some devices but not all. The visual focus ring (yellow square, iOS-style animation) always appears regardless, which provides useful UX feedback even without hardware focus control.
+
+**iOS background uploads are unsolved:** Safari does not support Background Sync API. The `visibilitychange` flush approach was tested but iOS suspends the PWA before uploads complete. The app currently relies on foreground-only sync — photos queue in IndexedDB and upload when the user reopens the app. This works fine for typical use (field reps open the app, take photos, close it, reopen later), but photos won't upload while the app is in the background.
+
 ---
 
 # Open Items / TODOs
@@ -524,6 +545,11 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [x] R2 custom metadata attached to images (user_name, retailer, timestamp, GPS coords)
 - [x] Phone → R2 upload confirmed working (images appear in Cloudflare dashboard)
 - [x] Gemini extraction confirmed working (returns structured JSON, nulls for non-product photos)
+- [x] Pinch-to-zoom with hardware zoom via `applyConstraints` + zoom level indicator with tap-to-reset
+- [x] Tap-to-focus with iOS-style yellow focus ring + hardware `focusMode` toggle (best-effort)
+- [x] iOS background upload via `visibilitychange` flush (parallel, fire-all-at-once) — **did not work reliably in practice, removed**
+- [x] Parallel foreground uploads (2 concurrent via `Promise.allSettled`)
+- [x] Cache version bumped to `shelftag-v9`
 - [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
 - [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
 - [ ] Custom domain setup (e.g. `shelftag.180snacks.com`)
@@ -532,4 +558,5 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [ ] Reverse geocoding for exact country → currency mapping (production improvement)
 - [x] Clarify "FX NW oz" column purpose — it's an Airtable Formula: `IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396)`
 - [x] "IMage" column renamed to "Image" — code already updated
+- [ ] **iOS background uploads — unsolved.** Safari does not support Background Sync API (SyncManager). The `visibilitychange` flush approach (fire all uploads when app goes to background) was implemented and tested but does not work reliably — iOS suspends the PWA before uploads complete. Remaining options: (a) native app wrapper with WKWebView + URLSession background tasks, (b) accept foreground-only uploads and rely on the 30-second retry timer + online event to catch up when the app is reopened. Currently using option (b).
 - [ ] Review 180 Snacks' Deacom contract for any restrictive automation clauses (low risk, but prudent)

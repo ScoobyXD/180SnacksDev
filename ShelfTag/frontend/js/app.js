@@ -2,21 +2,19 @@
  * ShelfTag — Main Application
  * ========================
  * Entry point that ties together all modules:
- * - Camera (viewfinder + capture)
+ * - Camera (viewfinder + capture + zoom + focus)
  * - Storage (IndexedDB queue + localStorage preferences)
- * - Sync (upload queue to backend when online)
+ * - Sync (parallel upload when online, aggressive flush on background)
  * - Geo (geolocation for currency detection)
  * 
- * UI flow:
- * 1. App opens → fullscreen camera viewfinder
- * 2. Bottom-right corner shows user name + retailer (tappable to edit)
- * 3. User taps shutter button → photo captured → queued in IndexedDB
- * 4. Sync badge shows pending count
- * 5. When online, photos auto-sync to backend → Airtable
+ * Gestures:
+ * - Pinch on viewfinder → zoom in/out (hardware zoom)
+ * - Single tap on viewfinder → focus (yellow ring + hardware refocus)
+ * - Tap zoom indicator (bottom-right) → reset to 1×
  */
 
-import { initCamera, capturePhoto, stopCamera } from './camera.js';
-import { initDB, queuePhoto, saveUserName, getUserName, saveRetailer, getRetailer, getQueueStats } from './storage.js';
+import { initCamera, capturePhoto, stopCamera, setZoom, resetZoom, getCurrentZoom, getZoomCapabilities, tapToFocus } from './camera.js';
+import { initDB, queuePhoto, saveUserName, getUserName, saveRetailer, getRetailer, getQueueStats, clearAllPhotos } from './storage.js';
 import { initSync, processQueue, onSyncStatusChange } from './sync.js';
 import { initGeolocation, getCurrentPosition } from './geo.js';
 
@@ -24,31 +22,25 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
 // APP STATE
 // ============================================================================
 
-let cameraStream = null;   // Active camera MediaStream
-let isCapturing = false;   // Debounce for shutter button
+let cameraStream = null;
+let isCapturing = false;
+
+// Gesture state
+let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
+let tapState = { startX: 0, startY: 0, startTime: 0, moved: false, fingers: 0 };
 
 
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
 
-/**
- * Boot the app — called when the page loads.
- * Initializes all modules in the correct order.
- */
 async function init() {
     console.log('[App] Initializing ShelfTag...');
 
-    // 1. Register the service worker (for PWA + offline support)
     await registerServiceWorker();
-
-    // 2. Initialize IndexedDB (photo queue)
     await initDB();
-
-    // 3. Initialize geolocation (for currency detection)
     initGeolocation();
 
-    // 4. Start the camera
     const videoEl = document.getElementById('viewfinder');
     try {
         cameraStream = await initCamera(videoEl);
@@ -57,30 +49,23 @@ async function init() {
         return;
     }
 
-    // 5. Load saved user preferences from localStorage
     loadUserPreferences();
 
-    // 6. Initialize the sync system (auto-upload when online)
     initSync();
     onSyncStatusChange(updateSyncBadge);
 
-    // 7. Wire up UI event handlers
     setupEventHandlers();
+    setupCameraGestures();
+    updateZoomIndicator();
 
-    // 8. Initial sync check (upload any photos queued from last session)
     processQueue();
 
-    // 9. Update the sync badge with current queue stats
     const stats = await getQueueStats();
     updateSyncBadge(stats);
 
     console.log('[App] ShelfTag initialized successfully');
 }
 
-
-/**
- * Register the service worker for PWA offline support.
- */
 async function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         try {
@@ -88,37 +73,24 @@ async function registerServiceWorker() {
             console.log('[App] Service worker registered:', reg.scope);
         } catch (error) {
             console.warn('[App] Service worker registration failed:', error);
-            // Non-fatal — app works without SW, just not offline
         }
     }
 }
 
 
 // ============================================================================
-// USER PREFERENCES UI
+// USER PREFERENCES
 // ============================================================================
 
-/**
- * Load saved user name and retailer from localStorage and populate the UI.
- */
 function loadUserPreferences() {
-    const nameInput = document.getElementById('user-name');
-    const retailerInput = document.getElementById('retailer-name');
-
-    nameInput.value = getUserName();
-    retailerInput.value = getRetailer();
+    document.getElementById('user-name').value = getUserName();
+    document.getElementById('retailer-name').value = getRetailer();
 }
 
-/**
- * Save user name when the input changes.
- */
 function handleNameChange(event) {
     saveUserName(event.target.value.trim());
 }
 
-/**
- * Save retailer name when the input changes.
- */
 function handleRetailerChange(event) {
     saveRetailer(event.target.value.trim());
 }
@@ -128,17 +100,11 @@ function handleRetailerChange(event) {
 // PHOTO CAPTURE
 // ============================================================================
 
-/**
- * Handle the shutter button tap — capture a photo and queue it.
- */
 async function handleCapture() {
-    // Debounce — prevent double-taps
     if (isCapturing) return;
     isCapturing = true;
 
     const videoEl = document.getElementById('viewfinder');
-
-    // Validate that user name and retailer are set
     const userName = getUserName();
     const retailer = getRetailer();
 
@@ -149,35 +115,26 @@ async function handleCapture() {
     }
 
     try {
-        // Visual feedback — flash effect
         triggerFlash();
 
-        // Capture the photo at full resolution
         const imageBase64 = capturePhoto(videoEl);
-
-        // Build metadata
         const now = new Date();
-        const timestamp = formatTimestamp(now);
         const position = getCurrentPosition();
 
         const metadata = {
             user_name: userName,
             retailer: retailer,
-            timestamp: timestamp,
+            timestamp: formatTimestamp(now),
             latitude: position?.latitude || null,
             longitude: position?.longitude || null,
         };
 
-        // Queue the photo in IndexedDB
         await queuePhoto(imageBase64, metadata);
 
-        // Update UI
         const stats = await getQueueStats();
         updateSyncBadge(stats);
-
         showToast('Photo captured!');
 
-        // Try to sync immediately if online
         processQueue();
 
     } catch (error) {
@@ -190,12 +147,125 @@ async function handleCapture() {
 
 
 // ============================================================================
+// CAMERA GESTURES — Pinch-to-Zoom + Tap-to-Focus
+// ============================================================================
+
+function setupCameraGestures() {
+    const viewfinder = document.getElementById('viewfinder');
+
+    viewfinder.addEventListener('touchstart', handleTouchStart, { passive: false });
+    viewfinder.addEventListener('touchmove', handleTouchMove, { passive: false });
+    viewfinder.addEventListener('touchend', handleTouchEnd, { passive: false });
+}
+
+function handleTouchStart(e) {
+    if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator')) return;
+
+    tapState.fingers = e.touches.length;
+    tapState.moved = false;
+
+    if (e.touches.length === 2) {
+        e.preventDefault();
+        pinchState.active = true;
+        pinchState.initialDistance = getTouchDistance(e.touches);
+        pinchState.initialZoom = getCurrentZoom();
+    } else if (e.touches.length === 1) {
+        tapState.startX = e.touches[0].clientX;
+        tapState.startY = e.touches[0].clientY;
+        tapState.startTime = Date.now();
+    }
+}
+
+function handleTouchMove(e) {
+    if (pinchState.active && e.touches.length === 2) {
+        e.preventDefault();
+        const currentDistance = getTouchDistance(e.touches);
+        const scale = currentDistance / pinchState.initialDistance;
+        const newZoom = pinchState.initialZoom * scale;
+        setZoom(newZoom).then(updateZoomIndicator);
+    } else if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - tapState.startX;
+        const dy = e.touches[0].clientY - tapState.startY;
+        if (Math.sqrt(dx * dx + dy * dy) > 10) {
+            tapState.moved = true;
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    if (pinchState.active) {
+        pinchState.active = false;
+        return;
+    }
+
+    // Tap-to-focus: single finger, brief, no movement
+    if (tapState.fingers === 1 && !tapState.moved && (Date.now() - tapState.startTime) < 300) {
+        if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator')) return;
+
+        const viewfinder = document.getElementById('viewfinder');
+        const rect = viewfinder.getBoundingClientRect();
+        const screenX = tapState.startX;
+        const screenY = tapState.startY;
+        const normX = (screenX - rect.left) / rect.width;
+        const normY = (screenY - rect.top) / rect.height;
+
+        showFocusRing(screenX, screenY);
+        tapToFocus(normX, normY);
+    }
+}
+
+function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Show iOS-style yellow focus ring at the tap point.
+ */
+function showFocusRing(x, y) {
+    const ring = document.getElementById('focus-ring');
+    if (!ring) return;
+
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+
+    ring.classList.remove('active');
+    void ring.offsetWidth; // Force reflow to restart animation
+    ring.classList.add('active');
+}
+
+/**
+ * Update zoom indicator. Shows raw zoom level (1.0×, 2.0×, etc).
+ * Turns yellow when zoomed past 1×. Tap resets to 1×.
+ */
+function updateZoomIndicator() {
+    const indicator = document.getElementById('zoom-indicator');
+    if (!indicator) return;
+
+    const capabilities = getZoomCapabilities();
+    if (!capabilities) {
+        indicator.classList.add('hidden');
+        return;
+    }
+
+    const zoom = getCurrentZoom();
+
+    indicator.classList.remove('hidden');
+    indicator.textContent = `${zoom.toFixed(1)}×`;
+
+    if (zoom > 1.05) {
+        indicator.classList.add('zoomed');
+    } else {
+        indicator.classList.remove('zoomed');
+    }
+}
+
+
+// ============================================================================
 // UI HELPERS
 // ============================================================================
 
-/**
- * Format a Date object as "MM/DD/YYYY HH:MM" for the timestamp field.
- */
 function formatTimestamp(date) {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
@@ -205,32 +275,18 @@ function formatTimestamp(date) {
     return `${mm}/${dd}/${yyyy} ${hh}:${min}`;
 }
 
-/**
- * Update the sync badge showing pending photo count.
- * 
- * Only counts 'pending' (not 'syncing') so the badge drops
- * the moment upload starts — matching what the user sees in Cloudflare.
- * Always visible: green "0" when clear, red with count when pending.
- */
 function updateSyncBadge(stats) {
     const badge = document.getElementById('sync-badge');
     const count = stats.pending;
 
     badge.textContent = count;
-
-    // Remove all state classes
     badge.classList.remove('pending', 'syncing');
 
     if (count > 0) {
-        // Has pending photos — red or orange (if actively syncing)
         badge.classList.add(stats.syncing > 0 ? 'syncing' : 'pending');
     }
-    // else: no classes = green (default in CSS)
 }
 
-/**
- * Show a brief toast message at the top of the screen.
- */
 function showToast(message) {
     const toast = document.getElementById('toast');
     toast.textContent = message;
@@ -238,23 +294,41 @@ function showToast(message) {
     setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
-/**
- * Show an error message (for camera permission denied, etc).
- */
 function showError(message) {
-    const errorEl = document.getElementById('error-screen');
-    const errorMsg = document.getElementById('error-message');
-    errorMsg.textContent = message;
-    errorEl.classList.remove('hidden');
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-screen').classList.remove('hidden');
 }
 
-/**
- * Trigger a camera flash effect (brief white overlay).
- */
 function triggerFlash() {
     const flash = document.getElementById('flash');
     flash.classList.add('active');
     setTimeout(() => flash.classList.remove('active'), 150);
+}
+
+
+// ============================================================================
+// QUEUE MODAL
+// ============================================================================
+
+function openQueueModal() {
+    document.getElementById('queue-modal').classList.remove('hidden');
+    getQueueStats().then(stats => {
+        document.getElementById('stat-pending').textContent = stats.pending;
+        document.getElementById('stat-syncing').textContent = stats.syncing;
+        document.getElementById('stat-failed').textContent = stats.failed;
+    });
+}
+
+function closeQueueModal() {
+    document.getElementById('queue-modal').classList.add('hidden');
+}
+
+async function handleClearQueue() {
+    const count = await clearAllPhotos();
+    showToast(`Cleared ${count} photo${count !== 1 ? 's' : ''}`);
+    closeQueueModal();
+    const stats = await getQueueStats();
+    updateSyncBadge(stats);
 }
 
 
@@ -266,26 +340,36 @@ function setupEventHandlers() {
     // Shutter button
     document.getElementById('shutter-btn').addEventListener('click', handleCapture);
 
-    // User name input — save on change
+    // User name / retailer inputs
     const nameInput = document.getElementById('user-name');
     nameInput.addEventListener('change', handleNameChange);
     nameInput.addEventListener('blur', handleNameChange);
 
-    // Retailer input — save on change
     const retailerInput = document.getElementById('retailer-name');
     retailerInput.addEventListener('change', handleRetailerChange);
     retailerInput.addEventListener('blur', handleRetailerChange);
 
-    // Make the info box tappable to focus inputs
+    // Info box tap → focus first empty input
     document.getElementById('info-box').addEventListener('click', (e) => {
-        // Don't interfere if they tapped directly on an input
         if (e.target.tagName === 'INPUT') return;
-        // Focus the first empty input, or the retailer if both are filled
-        if (!nameInput.value) {
-            nameInput.focus();
-        } else {
-            retailerInput.focus();
-        }
+        if (!nameInput.value) nameInput.focus();
+        else retailerInput.focus();
+    });
+
+    // Sync badge tap → queue modal
+    document.getElementById('sync-badge').addEventListener('click', openQueueModal);
+
+    // Queue modal controls
+    document.getElementById('queue-modal-close').addEventListener('click', closeQueueModal);
+    document.getElementById('clear-queue-btn').addEventListener('click', handleClearQueue);
+    document.getElementById('queue-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'queue-modal') closeQueueModal();
+    });
+
+    // Zoom indicator tap → reset to 1×
+    document.getElementById('zoom-indicator').addEventListener('click', async () => {
+        await resetZoom();
+        updateZoomIndicator();
     });
 }
 
@@ -294,10 +378,8 @@ function setupEventHandlers() {
 // APP LIFECYCLE
 // ============================================================================
 
-// Boot the app when the page loads
 document.addEventListener('DOMContentLoaded', init);
 
-// Clean up camera when leaving the page
 window.addEventListener('beforeunload', () => {
     stopCamera(cameraStream);
 });

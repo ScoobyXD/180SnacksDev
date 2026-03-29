@@ -2,57 +2,38 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    
-    <!-- Mobile viewport — prevents zoom, sets proper width -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    
-    <!-- PWA meta tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
-    
     <title>ShelfTag — 180 Snacks</title>
-    
-    <!-- PWA Manifest (defines home screen icon, standalone mode, etc.) -->
     <link rel="manifest" href="/manifest.json">
-    
-    <!-- Apple touch icon (shown on iOS home screen) -->
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
-    
-    <!-- Camera app styles -->
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
 
-    <!-- ================================================================== -->
-    <!-- CAMERA VIEWFINDER                                                   -->
-    <!-- ================================================================== -->
+    <!-- CAMERA VIEWFINDER -->
     <div id="camera-container">
         <video id="viewfinder" autoplay playsinline muted></video>
     </div>
 
-    <!-- ================================================================== -->
-    <!-- FLASH OVERLAY                                                       -->
-    <!-- ================================================================== -->
+    <!-- FOCUS RING (positioned dynamically via JS at tap location) -->
+    <div id="focus-ring"></div>
+
+    <!-- FLASH OVERLAY -->
     <div id="flash"></div>
 
-    <!-- ================================================================== -->
-    <!-- CONNECTIVITY INDICATOR                                              -->
-    <!-- ================================================================== -->
+    <!-- CONNECTIVITY INDICATOR (top-left) -->
     <div id="connectivity">
         <div class="dot"></div>
         <span id="connectivity-text">Online</span>
     </div>
 
-    <!-- ================================================================== -->
-    <!-- SYNC BADGE (tappable — opens queue modal)                           -->
-    <!-- ================================================================== -->
-    <div id="sync-badge" class="hidden">0</div>
+    <!-- SYNC BADGE (top-right, tappable → queue modal) -->
+    <div id="sync-badge">0</div>
 
-    <!-- ================================================================== -->
-    <!-- QUEUE MODAL                                                         -->
-    <!-- Shown when sync badge is tapped. Shows stats + clear queue button.  -->
-    <!-- ================================================================== -->
+    <!-- QUEUE MODAL -->
     <div id="queue-modal" class="hidden">
         <div id="queue-modal-content">
             <div id="queue-modal-header">
@@ -78,21 +59,10 @@
         </div>
     </div>
 
-    <!-- ================================================================== -->
-    <!-- TOAST                                                               -->
-    <!-- ================================================================== -->
+    <!-- TOAST -->
     <div id="toast"></div>
 
-    <!-- ================================================================== -->
-    <!-- BOTTOM CONTROLS                                                     -->
-    <!-- ================================================================== -->
-    <div id="controls">
-        <button id="shutter-btn" aria-label="Take photo"></button>
-    </div>
-
-    <!-- ================================================================== -->
-    <!-- INFO BOX (top of screen, side by side)                              -->
-    <!-- ================================================================== -->
+    <!-- INFO BOX (top center, Name + Retailer side by side) -->
     <div id="info-box">
         <div class="input-group">
             <label for="user-name">Name</label>
@@ -104,17 +74,22 @@
         </div>
     </div>
 
-    <!-- ================================================================== -->
-    <!-- ERROR SCREEN                                                        -->
-    <!-- ================================================================== -->
+    <!-- BOTTOM CONTROLS (shutter center, zoom indicator right) -->
+    <div id="controls">
+        <div class="controls-spacer"></div>
+        <button id="shutter-btn" aria-label="Take photo"></button>
+        <div class="controls-right">
+            <div id="zoom-indicator" class="hidden">1.0×</div>
+        </div>
+    </div>
+
+    <!-- ERROR SCREEN -->
     <div id="error-screen" class="hidden">
         <div class="error-icon">📷</div>
         <p id="error-message">Camera error</p>
     </div>
 
-    <!-- ================================================================== -->
-    <!-- APP SCRIPTS                                                         -->
-    <!-- ================================================================== -->
+    <!-- APP SCRIPTS -->
     <script type="module" src="/js/app.js"></script>
 
     <!-- CONNECTIVITY DETECTION (inline) -->
