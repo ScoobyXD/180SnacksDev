@@ -301,8 +301,10 @@ function showError(message) {
 
 function triggerFlash() {
     const flash = document.getElementById('flash');
+    flash.classList.remove('active');
+    void flash.offsetWidth; // Force reflow to restart animation
     flash.classList.add('active');
-    setTimeout(() => flash.classList.remove('active'), 150);
+    setTimeout(() => flash.classList.remove('active'), 350);
 }
 
 

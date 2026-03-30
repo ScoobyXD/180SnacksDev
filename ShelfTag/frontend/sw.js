@@ -21,7 +21,7 @@
  */
 
 // Bump this when you deploy new frontend code
-const CACHE_VERSION = 'shelftag-v9';
+const CACHE_VERSION = 'shelftag-v10';
 
 // Files to cache for offline use
 const CACHE_FILES = [
