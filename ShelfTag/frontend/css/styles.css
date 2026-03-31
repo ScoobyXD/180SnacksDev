@@ -13,6 +13,10 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+    --accent-blue: rgba(108, 191, 255, 0.94);
+}
+
 html, body {
     width: 100%;
     height: 100%;
@@ -120,68 +124,75 @@ html, body {
 
 /* Left container — matches the width of the right container */
 .controls-left {
-    flex: 1;
+    position: absolute;
+    left: 0;
+    width: calc(50% - 50px);
     display: flex;
-    justify-content: center;
+    justify-content: space-evenly;
+    align-items: center;
 }
 
-/* Right container — holds zoom indicator, same flex as spacer to keep shutter centered */
+/* Right container — centers selector in the right half (between shutter and right edge) */
 .controls-right {
-    flex: 1;
+    position: absolute;
+    right: 0;
+    width: calc(50% - 50px);
     display: flex;
     justify-content: center;
+    align-items: center;
 }
 
 
-/* ---- Zoom Level Indicator ---- */
-/*
- * Bottom-right, same row as shutter button.
- * Shows "1.0×", "2.5×" etc.
- * Turns yellow when zoomed in — tap to reset to 1×.
- * Hidden on devices that don't support zoom.
- */
-#zoom-indicator {
-    font-size: 14px;
-    font-weight: 700;
+/* ---- Small Icon Controls (gallery / zoom / mode) ---- */
+#gallery-btn,
+#zoom-btn,
+#capture-mode-btn {
     color: #fff;
     background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    min-width: 52px;
-    height: 32px;
-    line-height: 32px;
-    text-align: center;
-    border-radius: 16px;
-    padding: 0 12px;
-    cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease;
-}
-
-#zoom-indicator.hidden {
-    visibility: hidden;
-}
-
-#zoom-indicator.zoomed {
-    background: rgba(255, 214, 10, 0.85);
-    color: #000;
-}
-
-#zoom-indicator:active {
-    transform: scale(0.92);
-}
-
-/* ---- Gallery Upload Button ---- */
-#gallery-btn {
     width: 44px;
     height: 44px;
     border-radius: 22px;
     border: 1px solid rgba(255,255,255,0.35);
-    background: rgba(255,255,255,0.15);
-    color: #fff;
     display: grid;
     place-items: center;
+    font-weight: 700;
 }
 
+#zoom-btn {
+    font-size: 11px;
+}
+
+#zoom-btn.hidden {
+    visibility: hidden;
+}
+
+#zoom-btn.zoomed {
+    background: rgba(255, 214, 10, 0.85);
+    color: #000;
+}
+
+#capture-mode-btn {
+    font-size: 17px;
+    margin-left: -10px;
+}
+
+#capture-mode-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+#capture-mode-btn.multi {
+    background: var(--accent-blue);
+    border-color: rgba(255,255,255,0.75);
+}
+
+#gallery-btn:active,
+#zoom-btn:active,
+#capture-mode-btn:active {
+    transform: scale(0.92);
+}
+
+/* ---- Gallery Upload Button ---- */
 #gallery-btn svg {
     width: 22px;
     height: 22px;
@@ -189,12 +200,92 @@ html, body {
     opacity: 0.92;
 }
 
-#gallery-btn:active {
-    transform: scale(0.92);
-}
-
 #gallery-input {
     display: none;
+}
+
+/* ---- Multi Tray ---- */
+#multi-tray {
+    position: fixed;
+    left: 0;
+    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    padding: 8px 8px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.62);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 70;
+}
+
+#multi-tray.hidden {
+    display: none;
+}
+
+#multi-upload-btn {
+    width: 100%;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: var(--accent-blue);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+#multi-upload-btn:disabled {
+    opacity: 0.35;
+}
+
+#multi-delete-btn {
+    position: absolute;
+    left: calc(100% + 8px);
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.28);
+    background: rgba(255, 76, 120, 0.95);
+    color: #fff;
+    display: grid;
+    place-items: center;
+}
+
+#multi-delete-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#multi-delete-btn.hidden {
+    display: none;
+}
+
+#multi-slots {
+    margin-top: 8px;
+    display: grid;
+    grid-template-rows: repeat(4, 44px);
+    gap: 6px;
+}
+
+.multi-slot {
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.34);
+    background: rgba(220, 230, 242, 0.18);
+    background-size: cover;
+    background-position: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.multi-slot.filled {
+    border-color: rgba(255,255,255,0.55);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+    background-color: rgba(255,255,255,0.04);
+}
+
+.multi-slot.selected {
+    border-color: rgba(255,255,255,0.95);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.45);
 }
 
 
@@ -230,6 +321,10 @@ html, body {
 
 #shutter-btn:active::after {
     transform: translate(-50%, -50%) scale(0.9);
+}
+
+#shutter-btn.disabled-multi {
+    opacity: 0.55;
 }
 
 
