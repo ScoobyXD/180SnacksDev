@@ -153,6 +153,7 @@ Deployed at: shelftagdev.jonathankim829.workers.dev
 - First time opening: fields are empty, user taps to type
 - Subsequent opens: fields are pre-filled from last session
 - Large circular shutter button centered at the bottom
+- Gallery upload icon on the bottom-left (same horizontal axis as shutter + zoom). Opens iOS/Android photo picker for batch queueing with an enforced cap (20 images max) to reduce Safari memory crashes.
 - Red sync badge (top-right) shows count of photos waiting to upload. Tappable — opens queue modal with stats and "Clear Queue" button.
 - Green/red connectivity dot (top-left) shows online/offline status
 - Camera flash effect on capture for visual feedback
@@ -173,7 +174,7 @@ Step by step, what happens when a user takes a photo:
 6. Worker sends image to Gemini Flash Lite with extraction prompt → gets structured JSON
 7. Worker creates Airtable record via REST API with all fields + image URL
 8. Airtable downloads the image from the public R2 URL and stores its own copy
-9. Airtable Formula fields (RT/oz, FX NW oz) compute automatically from the written data
+9. Airtable Formula fields (RT/oz, FX NW oz, RT/oz Discounted) compute automatically from the written data
 10. Worker responds success → frontend marks photo as synced → deletes local copy from IndexedDB
 
 ## Tech Stack
@@ -268,7 +269,9 @@ shelftag/
 | **Type** | Gemini Flash Lite | One of: "Single Bag", "Multi Box", "Multi Bag" — visual judgment |
 | **NW oz** | Gemini Flash Lite | Total net weight in ounces (number). For multi-packs: count × per-unit weight. |
 | **Retail Regular** | Gemini Flash Lite | Shelf price (number, no dollar sign) |
+| **Retail Discounted** | Gemini Flash Lite | Discounted/sale price when visible (number, no dollar sign). Null if absent. |
 | **RT/oz** | Airtable Formula | = {Retail Regular} / {FX NW oz}. Computed automatically by Airtable — the Worker does NOT write to this field. |
+| **RT/oz Discounted** | Airtable Formula | = {Retail Discounted} / {FX NW oz}. Computed automatically by Airtable — the Worker does NOT write to this field. |
 | **Notes** | Auto or blank | Blank unless outside US → auto-populated with currency info via geolocation |
 | **NW g** | Manual | User fills in Airtable (used for international products with gram-based weights) |
 | **FX NW oz** | Airtable Formula | = IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396). Computed automatically by Airtable — the Worker does NOT write to this field. |
@@ -425,7 +428,7 @@ npx wrangler deploy
 
 That's it — one command pushes both the Worker code and all `frontend/` static assets together. Changes are live within seconds.
 
-If you update the service worker cache version in `sw.js` (e.g. `shelftag-v2` → `shelftag-v3`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches.
+If you update the service worker cache version in `sw.js` (e.g. `shelftag-v10` → `shelftag-v11`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches. Also bump the in-app version label (`APP_VERSION` in `frontend/js/app.js`) by **0.01** every deploy.
 
 The Worker is live at: `shelftagdev.jonathankim829.workers.dev`
 
@@ -514,7 +517,11 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Airtable image download timing:** When the Worker creates a record with an image URL, Airtable asynchronously downloads the image from the public R2 bucket. Since the bucket is public, there is no URL expiry concern — images persist indefinitely.
 
-**Service worker update behavior:** When new code is deployed to Cloudflare, the service worker detects changes on the next app open and downloads updated files. However, the new version doesn't activate until the user closes and reopens the app (this is standard service worker lifecycle behavior). If a user reports they're on an old version, tell them to fully close and reopen. When debugging CSS or JS changes, always bump the `CACHE_VERSION` in `sw.js` to force cache invalidation.
+**Service worker update behavior:** ShelfTag now sends `SKIP_WAITING` to newly installed workers and reloads on `controllerchange`, so new deployments should activate on the next open/reload instead of requiring multiple full app closes. Still bump `CACHE_VERSION` in `sw.js` whenever frontend assets change.
+
+**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`, starting at `v01.00`). Every deploy that changes frontend behavior must increment by **0.01** and keep this aligned with the service worker cache bump.
+
+**Gallery upload memory guardrail:** iOS Safari PWAs can crash under high in-memory image loads. Keep batch uploads capped and process gallery files sequentially (never decode dozens of full-res photos in parallel). Current cap: 20 selected images per batch.
 
 **Airtable PAT truncation:** Airtable PATs are long (60+ characters). If `wrangler secret put AIRTABLE_PAT` results in 401 errors, the token was likely pasted incorrectly or truncated. Regenerate at airtable.com/create/tokens and re-enter.
 
@@ -549,7 +556,7 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [x] Tap-to-focus with iOS-style yellow focus ring + hardware `focusMode` toggle (best-effort)
 - [x] iOS background upload via `visibilitychange` flush (parallel, fire-all-at-once) — **did not work reliably in practice, removed**
 - [x] Parallel foreground uploads (2 concurrent via `Promise.allSettled`)
-- [x] Cache version bumped to `shelftag-v9`
+- [x] Cache version bumped to `shelftag-v11`
 - [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
 - [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
 - [ ] Custom domain setup (e.g. `shelftag.180snacks.com`)

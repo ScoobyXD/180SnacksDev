@@ -29,6 +29,7 @@
         <div class="dot"></div>
         <span id="connectivity-text">Online</span>
     </div>
+    <div id="app-version">v00.00</div>
 
     <!-- SYNC BADGE (top-right, tappable → queue modal) -->
     <div id="sync-badge">0</div>
@@ -76,7 +77,10 @@
 
     <!-- BOTTOM CONTROLS (shutter center, zoom indicator right) -->
     <div id="controls">
-        <div class="controls-spacer"></div>
+        <div class="controls-left">
+            <button id="gallery-btn" aria-label="Upload from gallery">🖼️</button>
+            <input type="file" id="gallery-input" accept="image/*" multiple>
+        </div>
         <button id="shutter-btn" aria-label="Take photo"></button>
         <div class="controls-right">
             <div id="zoom-indicator" class="hidden">1.0×</div>
