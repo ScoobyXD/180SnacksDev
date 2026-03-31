@@ -110,7 +110,9 @@ async function uploadPhoto(photo) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                image_base64: photo.image_base64,
+                images_base64: Array.isArray(photo.images_base64) && photo.images_base64.length > 0
+                    ? photo.images_base64
+                    : [photo.image_base64],
                 metadata: photo.metadata,
             }),
             signal: AbortSignal.timeout(UPLOAD_TIMEOUT),

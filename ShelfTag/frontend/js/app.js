@@ -10,7 +10,7 @@
  * Gestures:
  * - Pinch on viewfinder → zoom in/out (hardware zoom)
  * - Single tap on viewfinder → focus (yellow ring + hardware refocus)
- * - Tap zoom indicator (bottom-right) → reset to 1×
+ * - Tap zoom button (bottom-left cluster) → reset to 1×
  */
 
 import { initCamera, capturePhoto, stopCamera, setZoom, resetZoom, getCurrentZoom, getZoomCapabilities, tapToFocus } from './camera.js';
@@ -29,7 +29,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
  * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
  */
-const APP_VERSION = 'v01.05';
+const APP_VERSION = 'v01.06';
 
 /**
  * iOS Safari / PWA memory guardrail:
@@ -45,6 +45,9 @@ let cameraStream = null;
 let isCapturing = false;
 let isGalleryQueueing = false;
 let queueStatsInterval = null;
+let captureMode = 'single'; // 'single' | 'multi'
+let multiTrayImages = [];
+let selectedMultiIndex = null;
 
 // Gesture state
 let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
@@ -79,6 +82,8 @@ async function init() {
     setupCameraGestures();
     updateZoomIndicator();
     renderAppVersion();
+    renderCaptureModeButton();
+    renderMultiTray();
 
     processQueue();
 
@@ -153,7 +158,6 @@ function handleRetailerChange(event) {
 
 async function handleCapture() {
     if (isCapturing) return;
-    isCapturing = true;
 
     const videoEl = document.getElementById('viewfinder');
     const userName = getUserName();
@@ -161,9 +165,16 @@ async function handleCapture() {
 
     if (!userName || !retailer) {
         showToast('Please enter your name and retailer first');
-        isCapturing = false;
         return;
     }
+
+    if (captureMode === 'multi' && multiTrayImages.length >= 4) {
+        showToast('Multi tray is full — upload to queue first');
+        renderMultiTray();
+        return;
+    }
+
+    isCapturing = true;
 
     try {
         triggerFlash();
@@ -181,11 +192,16 @@ async function handleCapture() {
             source: 'camera',
         };
 
-        await queuePhoto(imageBase64, metadata);
-
-        const stats = await getQueueStats();
-        updateSyncBadge(stats);
-        processQueue();
+        if (captureMode === 'multi') {
+            multiTrayImages.push(imageBase64);
+            selectedMultiIndex = null;
+            renderMultiTray();
+        } else {
+            await queuePhoto(imageBase64, metadata);
+            const stats = await getQueueStats();
+            updateSyncBadge(stats);
+            processQueue();
+        }
 
     } catch (error) {
         console.error('[App] Capture error:', error);
@@ -193,6 +209,42 @@ async function handleCapture() {
     } finally {
         isCapturing = false;
     }
+}
+
+async function handleMultiTrayUpload() {
+    if (multiTrayImages.length === 0) {
+        showToast('Multi tray is empty');
+        return;
+    }
+
+    const userName = getUserName();
+    const retailer = getRetailer();
+
+    if (!userName || !retailer) {
+        showToast('Please enter your name and retailer first');
+        return;
+    }
+
+    const position = getCurrentPosition();
+    const metadata = {
+        user_name: userName,
+        retailer: retailer,
+        timestamp: formatTimestamp(new Date()),
+        latitude: position?.latitude || null,
+        longitude: position?.longitude || null,
+        source: 'camera_multi',
+        image_count: multiTrayImages.length,
+    };
+
+    await queuePhoto([...multiTrayImages], metadata);
+    multiTrayImages = [];
+    selectedMultiIndex = null;
+    renderMultiTray();
+    showToast('Multi photos added to queue');
+
+    const stats = await getQueueStats();
+    updateSyncBadge(stats);
+    processQueue();
 }
 
 /**
@@ -298,7 +350,7 @@ function setupCameraGestures() {
 }
 
 function handleTouchStart(e) {
-    if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator, #gallery-btn')) return;
+    if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-btn, #gallery-btn, #capture-mode-btn, #multi-tray')) return;
 
     tapState.fingers = e.touches.length;
     tapState.moved = false;
@@ -339,7 +391,7 @@ function handleTouchEnd(e) {
 
     // Tap-to-focus: single finger, brief, no movement
     if (tapState.fingers === 1 && !tapState.moved && (Date.now() - tapState.startTime) < 300) {
-        if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator, #gallery-btn')) return;
+        if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-btn, #gallery-btn, #capture-mode-btn, #multi-tray')) return;
 
         const viewfinder = document.getElementById('viewfinder');
         const rect = viewfinder.getBoundingClientRect();
@@ -375,11 +427,11 @@ function showFocusRing(x, y) {
 }
 
 /**
- * Update zoom indicator. Shows raw zoom level (1.0×, 2.0×, etc).
+ * Update zoom button. Shows raw zoom level (1.0×, 2.0×, etc).
  * Turns yellow when zoomed past 1×. Tap resets to 1×.
  */
 function updateZoomIndicator() {
-    const indicator = document.getElementById('zoom-indicator');
+    const indicator = document.getElementById('zoom-btn');
     if (!indicator) return;
 
     const capabilities = getZoomCapabilities();
@@ -398,6 +450,78 @@ function updateZoomIndicator() {
     } else {
         indicator.classList.remove('zoomed');
     }
+}
+
+function renderCaptureModeButton() {
+    const modeBtn = document.getElementById('capture-mode-btn');
+    if (!modeBtn) return;
+
+    const isMulti = captureMode === 'multi';
+    modeBtn.innerHTML = isMulti
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 2h7v5h-7v-5Zm0-2h7v-2h-7v2Z"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>';
+    modeBtn.classList.toggle('multi', isMulti);
+    modeBtn.setAttribute('aria-label', isMulti ? 'Switch to single mode' : 'Switch to multi mode');
+}
+
+function renderMultiTray() {
+    const tray = document.getElementById('multi-tray');
+    const uploadBtn = document.getElementById('multi-upload-btn');
+    const deleteBtn = document.getElementById('multi-delete-btn');
+    const shutterBtn = document.getElementById('shutter-btn');
+    if (!tray || !uploadBtn || !deleteBtn || !shutterBtn) return;
+
+    const isMulti = captureMode === 'multi';
+    tray.classList.toggle('hidden', !isMulti);
+
+    const isFull = multiTrayImages.length >= 4;
+    tray.classList.toggle('full', isFull);
+    shutterBtn.classList.toggle('disabled-multi', isMulti && isFull);
+    uploadBtn.disabled = multiTrayImages.length === 0;
+    deleteBtn.classList.toggle('hidden', selectedMultiIndex == null);
+
+    const slots = Array.from(document.querySelectorAll('.multi-slot'));
+    const startSlot = Math.max(0, slots.length - multiTrayImages.length);
+    slots.forEach((slot, idx) => {
+        const imageIndex = idx >= startSlot ? (idx - startSlot) : null;
+        const image = imageIndex != null ? multiTrayImages[imageIndex] : null;
+        if (image) {
+            slot.classList.add('filled');
+            slot.style.backgroundImage = `url(data:image/jpeg;base64,${image})`;
+            slot.dataset.imageIndex = String(imageIndex);
+            slot.classList.toggle('selected', selectedMultiIndex === imageIndex);
+        } else {
+            slot.classList.remove('filled');
+            slot.classList.remove('selected');
+            slot.style.backgroundImage = 'none';
+            slot.dataset.imageIndex = '';
+        }
+    });
+}
+
+function toggleCaptureMode() {
+    captureMode = captureMode === 'single' ? 'multi' : 'single';
+    selectedMultiIndex = null;
+    renderCaptureModeButton();
+    renderMultiTray();
+}
+
+function handleMultiSlotSelect(event) {
+    const slot = event.currentTarget;
+    if (!slot.classList.contains('filled')) return;
+
+    const imageIndex = Number(slot.dataset.imageIndex);
+    if (!Number.isFinite(imageIndex)) return;
+
+    selectedMultiIndex = selectedMultiIndex === imageIndex ? null : imageIndex;
+    renderMultiTray();
+}
+
+function handleDeleteSelectedMulti() {
+    if (selectedMultiIndex == null) return;
+    multiTrayImages.splice(selectedMultiIndex, 1);
+    selectedMultiIndex = null;
+    renderMultiTray();
 }
 
 
@@ -545,10 +669,18 @@ function setupEventHandlers() {
         if (e.target.id === 'queue-modal') closeQueueModal();
     });
 
-    // Zoom indicator tap → reset to 1×
-    document.getElementById('zoom-indicator').addEventListener('click', async () => {
+    // Zoom button tap → reset to 1×
+    document.getElementById('zoom-btn').addEventListener('click', async () => {
         await resetZoom();
         updateZoomIndicator();
+    });
+
+    // Capture mode + multi tray upload
+    document.getElementById('capture-mode-btn').addEventListener('click', toggleCaptureMode);
+    document.getElementById('multi-upload-btn').addEventListener('click', handleMultiTrayUpload);
+    document.getElementById('multi-delete-btn').addEventListener('click', handleDeleteSelectedMulti);
+    document.querySelectorAll('.multi-slot').forEach((slot) => {
+        slot.addEventListener('click', handleMultiSlotSelect);
     });
 
     // Gallery upload (bottom-left icon).
