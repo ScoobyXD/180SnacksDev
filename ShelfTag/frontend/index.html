@@ -81,7 +81,11 @@
     <!-- MULTI TRAY (shown when multi mode is active) -->
     <div id="multi-tray" class="hidden" aria-live="polite">
         <button id="multi-upload-btn" aria-label="Queue multi photos">↑</button>
-        <button id="multi-delete-btn" class="hidden" aria-label="Delete selected multi photo">🗑</button>
+        <button id="multi-delete-btn" class="hidden" aria-label="Delete selected multi photo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h2v9H7V9Zm4 0h2v9h-2V9Zm4 0h2v9h-2V9ZM6 21a2 2 0 0 1-2-2V7h16v12a2 2 0 0 1-2 2H6Z"/>
+            </svg>
+        </button>
         <div id="multi-slots">
             <div class="multi-slot" data-slot="0"></div>
             <div class="multi-slot" data-slot="1"></div>

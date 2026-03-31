@@ -458,8 +458,8 @@ function renderCaptureModeButton() {
 
     const isMulti = captureMode === 'multi';
     modeBtn.innerHTML = isMulti
-        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 2h7v5h-7v-5Zm0-2h7v-2h-7v2Z"/></svg>'
-        : '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>';
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="6" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="10.7" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="15.4" width="6" height="2.6" rx="1" fill="currentColor"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4 9.5a2.5 2.5 0 0 1 2.5-2.5h2l1.2-2h4.6l1.2 2h2A2.5 2.5 0 0 1 20 9.5v7A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-7Z"/><circle cx="12" cy="13" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
     modeBtn.classList.toggle('multi', isMulti);
     modeBtn.setAttribute('aria-label', isMulti ? 'Switch to single mode' : 'Switch to multi mode');
 }
@@ -475,7 +475,6 @@ function renderMultiTray() {
     tray.classList.toggle('hidden', !isMulti);
 
     const isFull = multiTrayImages.length >= 4;
-    tray.classList.toggle('full', isFull);
     shutterBtn.classList.toggle('disabled-multi', isMulti && isFull);
     uploadBtn.disabled = multiTrayImages.length === 0;
     deleteBtn.classList.toggle('hidden', selectedMultiIndex == null);
@@ -497,6 +496,16 @@ function renderMultiTray() {
             slot.dataset.imageIndex = '';
         }
     });
+
+    if (selectedMultiIndex == null) {
+        deleteBtn.style.top = '';
+    } else {
+        const selectedSlot = startSlot + selectedMultiIndex;
+        const slotHeight = 44;
+        const slotGap = 6;
+        const slotsStartTop = 44;
+        deleteBtn.style.top = `${slotsStartTop + (selectedSlot * (slotHeight + slotGap)) + 6}px`;
+    }
 }
 
 function toggleCaptureMode() {
