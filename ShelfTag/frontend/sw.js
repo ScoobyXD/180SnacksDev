@@ -20,8 +20,11 @@
  * - On next page load, the new SW activates and old cache is deleted
  */
 
-// Bump this when you deploy new frontend code
-const CACHE_VERSION = 'shelftag-v10';
+// Bump this on every frontend deploy.
+// IMPORTANT FOR FUTURE LLMs/ENGINEERS:
+// - Keep APP_VERSION in /frontend/js/app.js in sync with this cache bump.
+// - Increment app version by 0.01 each deploy (v01.00 -> v01.01 -> v01.02 ...).
+const CACHE_VERSION = 'shelftag-v15';
 
 // Files to cache for offline use
 const CACHE_FILES = [
@@ -65,6 +68,13 @@ self.addEventListener('activate', (event) => {
             );
         }).then(() => self.clients.claim())
     );
+});
+
+// Allow the page to force activation of a newly installed worker immediately.
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 
