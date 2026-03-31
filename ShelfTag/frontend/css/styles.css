@@ -134,7 +134,8 @@ html, body {
 .controls-right {
     flex: 1;
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
+    padding-right: 2px;
 }
 
 
