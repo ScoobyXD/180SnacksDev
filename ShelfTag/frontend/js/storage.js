@@ -58,13 +58,15 @@ export async function initDB() {
 // PHOTO QUEUE OPERATIONS (IndexedDB)
 // ============================================================================
 
-export async function queuePhoto(imageBase64, metadata) {
+export async function queuePhoto(imageOrImagesBase64, metadata) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
+        const images = Array.isArray(imageOrImagesBase64) ? imageOrImagesBase64 : [imageOrImagesBase64];
 
         const record = {
-            image_base64: imageBase64,
+            image_base64: images[0], // legacy compatibility
+            images_base64: images,
             metadata: metadata,
             status: 'pending',
             created_at: new Date().toISOString(),
@@ -76,7 +78,8 @@ export async function queuePhoto(imageBase64, metadata) {
 
         request.onsuccess = () => {
             const id = request.result;
-            console.log(`[Storage] Photo queued: #${id} (${(imageBase64.length * 0.75 / 1024 / 1024).toFixed(1)} MB)`);
+            const sizeMB = images.reduce((sum, img) => sum + (img.length * 0.75 / 1024 / 1024), 0);
+            console.log(`[Storage] Photo queued: #${id} (${images.length} image${images.length !== 1 ? 's' : ''}, ${sizeMB.toFixed(1)} MB)`);
             resolve(id);
         };
 
