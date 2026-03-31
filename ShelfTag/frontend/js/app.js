@@ -6,7 +6,7 @@
  * - Storage (IndexedDB queue + localStorage preferences)
  * - Sync (parallel upload when online, aggressive flush on background)
  * - Geo (geolocation for currency detection)
- * 
+ *
  * Gestures:
  * - Pinch on viewfinder → zoom in/out (hardware zoom)
  * - Single tap on viewfinder → focus (yellow ring + hardware refocus)
@@ -19,11 +19,31 @@ import { initSync, processQueue, onSyncStatusChange } from './sync.js';
 import { initGeolocation, getCurrentPosition } from './geo.js';
 
 // ============================================================================
+// APP VERSIONING (IMPORTANT FOR ALL FUTURE LLMs/ENGINEERS)
+// ============================================================================
+/**
+ * Displayed in the top-left status UI as "v##.##".
+ *
+ * VERSION BUMP RULE:
+ * - Increase this by exactly 0.01 on every deploy that changes frontend behavior.
+ * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
+ * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
+ */
+const APP_VERSION = 'v01.01';
+
+/**
+ * iOS Safari / PWA memory guardrail:
+ * process selected gallery images sequentially and cap selection size.
+ */
+const MAX_GALLERY_UPLOAD_COUNT = 20;
+
+// ============================================================================
 // APP STATE
 // ============================================================================
 
 let cameraStream = null;
 let isCapturing = false;
+let isGalleryQueueing = false;
 
 // Gesture state
 let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
@@ -57,6 +77,7 @@ async function init() {
     setupEventHandlers();
     setupCameraGestures();
     updateZoomIndicator();
+    renderAppVersion();
 
     processQueue();
 
@@ -71,6 +92,35 @@ async function registerServiceWorker() {
         try {
             const reg = await navigator.serviceWorker.register('/sw.js');
             console.log('[App] Service worker registered:', reg.scope);
+
+            // If a worker is waiting, activate it now instead of waiting for multiple reopen cycles.
+            if (reg.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                if (!newWorker) return;
+
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        console.log('[App] New SW installed, forcing immediate activation');
+                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                });
+            });
+
+            // After controller switches to new worker, reload once to guarantee latest code is active.
+            let hasRefreshed = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (hasRefreshed) return;
+                hasRefreshed = true;
+                console.log('[App] SW controller changed — reloading to latest version');
+                window.location.reload();
+            });
+
+            // Periodic SW update checks while app is open.
+            setInterval(() => reg.update(), 30000);
         } catch (error) {
             console.warn('[App] Service worker registration failed:', error);
         }
@@ -127,6 +177,7 @@ async function handleCapture() {
             timestamp: formatTimestamp(now),
             latitude: position?.latitude || null,
             longitude: position?.longitude || null,
+            source: 'camera',
         };
 
         await queuePhoto(imageBase64, metadata);
@@ -145,6 +196,95 @@ async function handleCapture() {
     }
 }
 
+/**
+ * Handle gallery uploads (iOS + Android).
+ *
+ * Memory-safety design:
+ * - Enforce a strict count cap.
+ * - Read and queue files one by one, never in parallel.
+ * - Keep full-quality source image (no compression) as requested.
+ */
+async function handleGallerySelection(event) {
+    const fileInput = event.target;
+    const files = Array.from(fileInput.files || []);
+
+    if (files.length === 0) return;
+
+    const userName = getUserName();
+    const retailer = getRetailer();
+
+    if (!userName || !retailer) {
+        showToast('Please enter your name and retailer first');
+        fileInput.value = '';
+        return;
+    }
+
+    if (files.length > MAX_GALLERY_UPLOAD_COUNT) {
+        showToast(`Please select ${MAX_GALLERY_UPLOAD_COUNT} photos or fewer`);
+        fileInput.value = '';
+        return;
+    }
+
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length !== files.length) {
+        showToast('Only image files are supported');
+        fileInput.value = '';
+        return;
+    }
+
+    try {
+        isGalleryQueueing = true;
+        updateSyncBadge(await getQueueStats());
+
+        for (let i = 0; i < imageFiles.length; i++) {
+            const file = imageFiles[i];
+
+            try {
+                const imageBase64 = await readFileAsBase64(file);
+                const position = getCurrentPosition();
+
+                const metadata = {
+                    user_name: userName,
+                    retailer,
+                    timestamp: formatTimestamp(new Date(file.lastModified || Date.now())),
+                    latitude: position?.latitude || null,
+                    longitude: position?.longitude || null,
+                    source: 'gallery',
+                    original_filename: file.name,
+                };
+
+                await queuePhoto(imageBase64, metadata);
+                showToast(`Queued ${i + 1}/${imageFiles.length}`);
+            } catch (error) {
+                console.error('[App] Failed to queue gallery photo:', file.name, error);
+                showToast(`Failed: ${file.name}`);
+            }
+        }
+    } finally {
+        isGalleryQueueing = false;
+    }
+
+    const stats = await getQueueStats();
+    updateSyncBadge(stats);
+    processQueue();
+
+    fileInput.value = '';
+}
+
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+            const dataUrl = String(reader.result || '');
+            resolve(dataUrl.split(',')[1] || '');
+        };
+
+        reader.onerror = () => reject(reader.error || new Error('File read failed'));
+        reader.readAsDataURL(file);
+    });
+}
+
 
 // ============================================================================
 // CAMERA GESTURES — Pinch-to-Zoom + Tap-to-Focus
@@ -159,7 +299,7 @@ function setupCameraGestures() {
 }
 
 function handleTouchStart(e) {
-    if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator')) return;
+    if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator, #gallery-btn')) return;
 
     tapState.fingers = e.touches.length;
     tapState.moved = false;
@@ -200,7 +340,7 @@ function handleTouchEnd(e) {
 
     // Tap-to-focus: single finger, brief, no movement
     if (tapState.fingers === 1 && !tapState.moved && (Date.now() - tapState.startTime) < 300) {
-        if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator')) return;
+        if (e.target.closest('#controls, #info-box, #sync-badge, #queue-modal, #zoom-indicator, #gallery-btn')) return;
 
         const viewfinder = document.getElementById('viewfinder');
         const rect = viewfinder.getBoundingClientRect();
@@ -280,9 +420,11 @@ function updateSyncBadge(stats) {
     const count = stats.pending;
 
     badge.textContent = count;
-    badge.classList.remove('pending', 'syncing');
+    badge.classList.remove('pending', 'syncing', 'processing');
 
-    if (count > 0) {
+    if (isGalleryQueueing) {
+        badge.classList.add('processing');
+    } else if (count > 0) {
         badge.classList.add(stats.syncing > 0 ? 'syncing' : 'pending');
     }
 }
@@ -304,7 +446,15 @@ function triggerFlash() {
     flash.classList.remove('active');
     void flash.offsetWidth; // Force reflow to restart animation
     flash.classList.add('active');
-    setTimeout(() => flash.classList.remove('active'), 350);
+
+    // Keep this aligned with shutter-blink CSS animation duration.
+    setTimeout(() => flash.classList.remove('active'), 200);
+}
+
+function renderAppVersion() {
+    const versionEl = document.getElementById('app-version');
+    if (!versionEl) return;
+    versionEl.textContent = APP_VERSION;
 }
 
 
@@ -372,6 +522,20 @@ function setupEventHandlers() {
     document.getElementById('zoom-indicator').addEventListener('click', async () => {
         await resetZoom();
         updateZoomIndicator();
+    });
+
+    // Gallery upload (bottom-left icon).
+    document.getElementById('gallery-input').addEventListener('change', handleGallerySelection);
+    document.getElementById('gallery-btn').addEventListener('click', () => {
+        const input = document.getElementById('gallery-input');
+
+        // Best-effort path toward opening directly into the media picker UI.
+        // Browser/OS may still show source options depending on platform policy.
+        if (typeof input.showPicker === 'function') {
+            input.showPicker();
+        } else {
+            input.click();
+        }
     });
 }
 
