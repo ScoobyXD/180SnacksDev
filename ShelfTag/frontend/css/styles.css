@@ -13,6 +13,10 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+    --accent-blue: rgba(88, 173, 255, 0.92);
+}
+
 html, body {
     width: 100%;
     height: 100%;
@@ -122,9 +126,8 @@ html, body {
 .controls-left {
     flex: 1;
     display: flex;
-    justify-content: flex-start;
-    gap: 10px;
-    padding-left: 2px;
+    justify-content: center;
+    gap: 14px;
 }
 
 /* Right container — holds zoom indicator, same flex as spacer to keep shutter centered */
@@ -168,8 +171,13 @@ html, body {
     font-size: 17px;
 }
 
+#capture-mode-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
 #capture-mode-btn.multi {
-    background: rgba(10, 132, 255, 0.85);
+    background: var(--accent-blue);
     border-color: rgba(255,255,255,0.75);
 }
 
@@ -194,7 +202,7 @@ html, body {
 /* ---- Multi Tray ---- */
 #multi-tray {
     position: fixed;
-    right: 14px;
+    right: calc(25% - 28px);
     bottom: calc(112px + env(safe-area-inset-bottom, 0px));
     width: 56px;
     padding: 8px 8px 10px;
@@ -220,7 +228,7 @@ html, body {
     height: 28px;
     border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.35);
-    background: rgba(10, 132, 255, 0.85);
+    background: var(--accent-blue);
     color: #fff;
     font-size: 16px;
     font-weight: 700;
@@ -228,6 +236,22 @@ html, body {
 
 #multi-upload-btn:disabled {
     opacity: 0.35;
+}
+
+#multi-delete-btn {
+    width: 100%;
+    height: 28px;
+    margin-top: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.32);
+    background: rgba(255, 69, 58, 0.86);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#multi-delete-btn.hidden {
+    display: none;
 }
 
 #multi-slots {
@@ -247,6 +271,11 @@ html, body {
 
 .multi-slot.filled {
     border-style: solid;
+}
+
+.multi-slot.selected {
+    border-color: rgba(255,255,255,0.95);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.45);
 }
 
 

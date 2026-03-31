@@ -47,6 +47,7 @@ let isGalleryQueueing = false;
 let queueStatsInterval = null;
 let captureMode = 'single'; // 'single' | 'multi'
 let multiTrayImages = [];
+let selectedMultiIndex = null;
 
 // Gesture state
 let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
@@ -193,8 +194,8 @@ async function handleCapture() {
 
         if (captureMode === 'multi') {
             multiTrayImages.push(imageBase64);
+            selectedMultiIndex = null;
             renderMultiTray();
-            showToast(`Added to multi tray (${multiTrayImages.length}/4)`);
         } else {
             await queuePhoto(imageBase64, metadata);
             const stats = await getQueueStats();
@@ -237,6 +238,7 @@ async function handleMultiTrayUpload() {
 
     await queuePhoto([...multiTrayImages], metadata);
     multiTrayImages = [];
+    selectedMultiIndex = null;
     renderMultiTray();
     showToast('Multi photos added to queue');
 
@@ -455,7 +457,9 @@ function renderCaptureModeButton() {
     if (!modeBtn) return;
 
     const isMulti = captureMode === 'multi';
-    modeBtn.textContent = isMulti ? 'M' : '1';
+    modeBtn.innerHTML = isMulti
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 2h7v5h-7v-5Zm0-2h7v-2h-7v2Z"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>';
     modeBtn.classList.toggle('multi', isMulti);
     modeBtn.setAttribute('aria-label', isMulti ? 'Switch to single mode' : 'Switch to multi mode');
 }
@@ -463,8 +467,9 @@ function renderCaptureModeButton() {
 function renderMultiTray() {
     const tray = document.getElementById('multi-tray');
     const uploadBtn = document.getElementById('multi-upload-btn');
+    const deleteBtn = document.getElementById('multi-delete-btn');
     const shutterBtn = document.getElementById('shutter-btn');
-    if (!tray || !uploadBtn || !shutterBtn) return;
+    if (!tray || !uploadBtn || !deleteBtn || !shutterBtn) return;
 
     const isMulti = captureMode === 'multi';
     tray.classList.toggle('hidden', !isMulti);
@@ -473,23 +478,49 @@ function renderMultiTray() {
     tray.classList.toggle('full', isFull);
     shutterBtn.classList.toggle('disabled-multi', isMulti && isFull);
     uploadBtn.disabled = multiTrayImages.length === 0;
+    deleteBtn.classList.toggle('hidden', selectedMultiIndex == null);
 
     const slots = Array.from(document.querySelectorAll('.multi-slot'));
+    const startSlot = Math.max(0, slots.length - multiTrayImages.length);
     slots.forEach((slot, idx) => {
-        const image = multiTrayImages[idx];
+        const imageIndex = idx >= startSlot ? (idx - startSlot) : null;
+        const image = imageIndex != null ? multiTrayImages[imageIndex] : null;
         if (image) {
             slot.classList.add('filled');
             slot.style.backgroundImage = `url(data:image/jpeg;base64,${image})`;
+            slot.dataset.imageIndex = String(imageIndex);
+            slot.classList.toggle('selected', selectedMultiIndex === imageIndex);
         } else {
             slot.classList.remove('filled');
+            slot.classList.remove('selected');
             slot.style.backgroundImage = 'none';
+            slot.dataset.imageIndex = '';
         }
     });
 }
 
 function toggleCaptureMode() {
     captureMode = captureMode === 'single' ? 'multi' : 'single';
+    selectedMultiIndex = null;
     renderCaptureModeButton();
+    renderMultiTray();
+}
+
+function handleMultiSlotSelect(event) {
+    const slot = event.currentTarget;
+    if (!slot.classList.contains('filled')) return;
+
+    const imageIndex = Number(slot.dataset.imageIndex);
+    if (!Number.isFinite(imageIndex)) return;
+
+    selectedMultiIndex = selectedMultiIndex === imageIndex ? null : imageIndex;
+    renderMultiTray();
+}
+
+function handleDeleteSelectedMulti() {
+    if (selectedMultiIndex == null) return;
+    multiTrayImages.splice(selectedMultiIndex, 1);
+    selectedMultiIndex = null;
     renderMultiTray();
 }
 
@@ -647,6 +678,10 @@ function setupEventHandlers() {
     // Capture mode + multi tray upload
     document.getElementById('capture-mode-btn').addEventListener('click', toggleCaptureMode);
     document.getElementById('multi-upload-btn').addEventListener('click', handleMultiTrayUpload);
+    document.getElementById('multi-delete-btn').addEventListener('click', handleDeleteSelectedMulti);
+    document.querySelectorAll('.multi-slot').forEach((slot) => {
+        slot.addEventListener('click', handleMultiSlotSelect);
+    });
 
     // Gallery upload (bottom-left icon).
     document.getElementById('gallery-input').addEventListener('change', handleGallerySelection);
