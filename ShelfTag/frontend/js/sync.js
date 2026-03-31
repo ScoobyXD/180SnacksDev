@@ -52,6 +52,49 @@ async function isBackendReachable() {
     }
 }
 
+/**
+ * Choose upload concurrency adaptively for mobile stability.
+ *
+ * Heuristics:
+ * - Honor Data Saver aggressively.
+ * - Use connection quality (2g/3g/4g) when available.
+ * - Reduce parallelism on lower-memory devices.
+ * - Cap iOS Safari/PWA slightly lower for stability.
+ */
+function getAdaptiveConcurrency() {
+    let concurrent = MAX_CONCURRENT;
+
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const effectiveType = connection?.effectiveType;
+    const saveData = Boolean(connection?.saveData);
+    const deviceMemory = navigator.deviceMemory || null;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+    if (saveData) {
+        concurrent = Math.min(concurrent, 2);
+    }
+
+    if (effectiveType === 'slow-2g' || effectiveType === '2g') {
+        concurrent = 1;
+    } else if (effectiveType === '3g') {
+        concurrent = Math.min(concurrent, 2);
+    } else if (effectiveType === '4g') {
+        concurrent = Math.min(concurrent, MAX_CONCURRENT);
+    }
+
+    if (deviceMemory != null) {
+        if (deviceMemory <= 1) concurrent = Math.min(concurrent, 1);
+        else if (deviceMemory <= 2) concurrent = Math.min(concurrent, 2);
+        else if (deviceMemory <= 4) concurrent = Math.min(concurrent, 3);
+    }
+
+    if (isIOS) {
+        concurrent = Math.min(concurrent, 3);
+    }
+
+    return Math.max(1, Math.min(MAX_CONCURRENT, concurrent));
+}
+
 
 /**
  * Upload a single photo to the Worker backend.
@@ -132,7 +175,8 @@ export async function processQueue() {
             return;
         }
 
-        console.log(`[Sync] Processing ${pendingPhotos.length} pending photos (${MAX_CONCURRENT} concurrent)...`);
+        const adaptiveConcurrency = getAdaptiveConcurrency();
+        console.log(`[Sync] Processing ${pendingPhotos.length} pending photos (${adaptiveConcurrency} concurrent, adaptive)...`);
 
         // Process in fixed-size batches
         for (let i = 0; i < pendingPhotos.length; i += MAX_CONCURRENT) {
@@ -141,7 +185,7 @@ export async function processQueue() {
                 break;
             }
 
-            const batch = pendingPhotos.slice(i, i + MAX_CONCURRENT);
+            const batch = pendingPhotos.slice(i, i + adaptiveConcurrency);
             const results = await Promise.allSettled(batch.map(uploadPhoto));
 
             // If any upload failed due to network, stop the batch
