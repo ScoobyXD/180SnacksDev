@@ -713,7 +713,7 @@ function setupEventHandlers() {
 
     // Info box tap → focus first empty input
     document.getElementById('info-box').addEventListener('click', (e) => {
-        if (e.target.tagName === 'INPUT') return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'LABEL') return;
         if (!nameInput.value) nameInput.focus();
         else retailerInput.focus();
     });
