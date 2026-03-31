@@ -110,7 +110,11 @@ async function handleSync(request, env) {
     let extraction = null;
     try {
         extraction = await extractWithGemini(image_base64, env.GEMINI_API_KEY);
-        console.log(`[Sync] Extracted: ${extraction.flavor || 'unknown'} | ${extraction.brand || 'unknown'} | ${extraction.nw_oz || '?'}oz | $${extraction.retail_regular || '?'}`);
+        console.log(
+            `[Sync] Extracted: ${extraction.flavor || 'unknown'} | ${extraction.brand || 'unknown'} | `
+            + `${extraction.nw_oz || '?'}oz | regular:$${extraction.retail_regular || '?'} | `
+            + `discount:$${extraction.retail_discounted ?? '?'}`
+        );
     } catch (geminiError) {
         console.error(`[Sync] Gemini extraction failed: ${geminiError.message}`);
         return Response.json({
@@ -186,6 +190,11 @@ Extract the following fields:
    - If both a sale price and regular price are shown, use the REGULAR price.
    - Return as a number without the dollar sign (e.g. 4.19, not "$4.19").
 
+8. **retail_discounted**: The discounted/sale price from the shelf tag if present.
+   - Return the discounted price when it is explicitly shown (club price, sale price, promo price).
+   - If no discounted price is visible, return null.
+   - Return as a number without the dollar sign.
+
 IMPORTANT RULES:
 - If you cannot determine a field from the image, set it to null. Do NOT guess.
 - If multiple products are visible, extract data for the product that is most prominent/centered in the image.
@@ -203,8 +212,9 @@ const RESPONSE_SCHEMA = {
         type: { type: "string", nullable: true, enum: ["Single Bag", "Multi Box", "Multi Bag"] },
         nw_oz: { type: "number", nullable: true },
         retail_regular: { type: "number", nullable: true },
+        retail_discounted: { type: "number", nullable: true },
     },
-    required: ["flavor", "brand", "flavor_description", "count", "type", "nw_oz", "retail_regular"]
+    required: ["flavor", "brand", "flavor_description", "count", "type", "nw_oz", "retail_regular", "retail_discounted"]
 };
 
 
@@ -282,9 +292,11 @@ async function createAirtableRecord(extraction, metadata, imageUrl, pat, baseId,
     if (extraction.type != null) fields["Type"] = extraction.type;
     if (extraction.nw_oz != null) fields["NW oz"] = extraction.nw_oz;
     if (extraction.retail_regular != null) fields["Retail Regular"] = extraction.retail_regular;
-    // NOTE: "RT/oz" and "FX NW oz" are Formula fields in Airtable — do NOT write to them.
+    if (extraction.retail_discounted != null) fields["Retail Discounted"] = extraction.retail_discounted;
+    // NOTE: "RT/oz", "FX NW oz", and "RT/oz Discounted" are Formula fields in Airtable — do NOT write to them.
     // RT/oz = {Retail Regular}/{FX NW oz}
     // FX NW oz = IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396)
+    // RT/oz Discounted = {Retail Discounted}/{FX NW oz}
 
     // Metadata
     fields["Retailer"] = metadata.retailer;
