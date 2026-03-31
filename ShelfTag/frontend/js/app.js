@@ -38,20 +38,20 @@ const APP_VERSION = 'v01.07';
 const MAX_GALLERY_UPLOAD_COUNT = 30;
 
 const RETAILER_OPTIONS = [
-    'Costco LA',
     'Costco BA',
-    'Costco SD',
-    'Costco NW',
-    'Costco TX',
+    'Costco LA',
     'Costco MW',
     'Costco NE',
+    'Costco NW',
+    'Costco SD',
     'Costco SE',
-    'TJ Maxx',
-    "Marshall's",
-    'HomeGoods',
-    'Ross',
+    'Costco TX',
     'Dollar Tree',
     'Grocery Outlet',
+    'HomeGoods',
+    "Marshall's",
+    'Ross',
+    'TJ Maxx',
 ];
 
 // ============================================================================
@@ -495,7 +495,7 @@ function renderCaptureModeButton() {
 
     const isMulti = captureMode === 'multi';
     modeBtn.innerHTML = isMulti
-        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="6" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="10.7" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="15.4" width="6" height="2.6" rx="1" fill="currentColor"/></svg>'
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.3" y="2.8" width="11.4" height="18.4" rx="3.3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="8.5" y="5.8" width="7" height="2.9" rx="1" fill="currentColor"/><rect x="8.5" y="10.5" width="7" height="2.9" rx="1" fill="currentColor"/><rect x="8.5" y="15.2" width="7" height="2.9" rx="1" fill="currentColor"/></svg>'
         : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="4.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.1 9.4h1.9v6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.1 10.7l1.2-1.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     modeBtn.classList.toggle('multi', isMulti);
     modeBtn.setAttribute('aria-label', isMulti ? 'Switch to single mode' : 'Switch to multi mode');
