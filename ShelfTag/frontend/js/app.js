@@ -29,7 +29,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
  * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
  */
-const APP_VERSION = 'v01.01';
+const APP_VERSION = 'v01.02';
 
 /**
  * iOS Safari / PWA memory guardrail:
@@ -424,8 +424,10 @@ function updateSyncBadge(stats) {
 
     if (isGalleryQueueing) {
         badge.classList.add('processing');
+    } else if (stats.syncing > 0) {
+        badge.classList.add('syncing');
     } else if (count > 0) {
-        badge.classList.add(stats.syncing > 0 ? 'syncing' : 'pending');
+        badge.classList.add('pending');
     }
 }
 
