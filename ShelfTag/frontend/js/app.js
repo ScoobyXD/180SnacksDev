@@ -29,13 +29,13 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
  * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
  */
-const APP_VERSION = 'v01.02';
+const APP_VERSION = 'v01.03';
 
 /**
  * iOS Safari / PWA memory guardrail:
  * process selected gallery images sequentially and cap selection size.
  */
-const MAX_GALLERY_UPLOAD_COUNT = 20;
+const MAX_GALLERY_UPLOAD_COUNT = 30;
 
 // ============================================================================
 // APP STATE

@@ -24,7 +24,7 @@
 // IMPORTANT FOR FUTURE LLMs/ENGINEERS:
 // - Keep APP_VERSION in /frontend/js/app.js in sync with this cache bump.
 // - Increment app version by 0.01 each deploy (v01.00 -> v01.01 -> v01.02 ...).
-const CACHE_VERSION = 'shelftag-v13';
+const CACHE_VERSION = 'shelftag-v14';
 
 // Files to cache for offline use
 const CACHE_FILES = [

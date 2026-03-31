@@ -340,14 +340,14 @@ html, body {
     top: calc(14px + env(safe-area-inset-top, 0px));
     right: 12px;
     color: #fff;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
-    min-width: 26px;
-    height: 26px;
-    line-height: 26px;
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
     text-align: center;
-    border-radius: 13px;
-    padding: 0 8px;
+    border-radius: 50%;
+    padding: 0;
     z-index: 60;
     cursor: pointer;
     transition: background 0.3s ease;
@@ -373,7 +373,7 @@ html, body {
 #sync-badge.processing::before {
     content: '';
     position: absolute;
-    inset: -4px;
+    inset: -3px;
     border-radius: 999px;
     border: 2px solid transparent;
     border-top-color: rgba(255, 255, 255, 0.95);

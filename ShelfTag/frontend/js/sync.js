@@ -28,7 +28,7 @@
 import { getPendingPhotos, updatePhotoStatus, deleteSyncedPhoto, getQueueStats, resetStuckPhotos } from './storage.js';
 
 const API_BASE = '';
-const MAX_CONCURRENT = 2;   // Parallel uploads in foreground
+const MAX_CONCURRENT = 4;   // Parallel uploads in foreground
 const UPLOAD_TIMEOUT = 60000; // 60 seconds per photo
 
 let isSyncing = false;

@@ -153,7 +153,7 @@ Deployed at: shelftagdev.jonathankim829.workers.dev
 - First time opening: fields are empty, user taps to type
 - Subsequent opens: fields are pre-filled from last session
 - Large circular shutter button centered at the bottom
-- Gallery upload icon on the bottom-left (same horizontal axis as shutter + zoom). Opens iOS/Android photo picker for batch queueing with an enforced cap (20 images max) to reduce Safari memory crashes.
+- Gallery upload icon on the bottom-left (same horizontal axis as shutter + zoom). Opens iOS/Android photo picker for batch queueing with an enforced cap (30 images max) to reduce Safari memory crashes.
 - Red sync badge (top-right) shows count of photos waiting to upload. Tappable — opens queue modal with stats and "Clear Queue" button.
 - Green/red connectivity dot (top-left) shows online/offline status
 - Camera flash effect on capture for visual feedback
@@ -428,7 +428,7 @@ npx wrangler deploy
 
 That's it — one command pushes both the Worker code and all `frontend/` static assets together. Changes are live within seconds.
 
-If you update the service worker cache version in `sw.js` (e.g. `shelftag-v12` → `shelftag-v13`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches. Also bump the in-app version label (`APP_VERSION` in `frontend/js/app.js`) by **0.01** every deploy.
+If you update the service worker cache version in `sw.js` (e.g. `shelftag-v13` → `shelftag-v14`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches. Also bump the in-app version label (`APP_VERSION` in `frontend/js/app.js`) by **0.01** every deploy.
 
 The Worker is live at: `shelftagdev.jonathankim829.workers.dev`
 
@@ -519,9 +519,9 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Service worker update behavior:** ShelfTag now sends `SKIP_WAITING` to newly installed workers and reloads on `controllerchange`, so new deployments should activate on the next open/reload instead of requiring multiple full app closes. Still bump `CACHE_VERSION` in `sw.js` whenever frontend assets change.
 
-**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`; current is `v01.02`). Every deploy that changes frontend behavior must increment by **0.01** and keep this aligned with the service worker cache bump.
+**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`; current is `v01.03`). Every deploy that changes frontend behavior must increment by **0.01** and keep this aligned with the service worker cache bump.
 
-**Gallery upload memory guardrail:** iOS Safari PWAs can crash under high in-memory image loads. Keep batch uploads capped and process gallery files sequentially (never decode dozens of full-res photos in parallel). Current cap: 20 selected images per batch.
+**Gallery upload memory guardrail:** iOS Safari PWAs can crash under high in-memory image loads. Keep batch uploads capped and process gallery files sequentially (never decode dozens of full-res photos in parallel). Current cap: 30 selected images per batch.
 
 **Airtable PAT truncation:** Airtable PATs are long (60+ characters). If `wrangler secret put AIRTABLE_PAT` results in 401 errors, the token was likely pasted incorrectly or truncated. Regenerate at airtable.com/create/tokens and re-enter.
 
@@ -537,7 +537,7 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Zoom values are raw hardware values, not Apple-style labels:** The zoom indicator shows the raw value from `MediaStreamTrack.getSettings().zoom`. On iPhones with ultra-wide lenses, hardware `1.0` is NOT the same as Apple's "1×" — Apple maps hardware `2.0` to their "1×". ShelfTag intentionally ignores this mapping and shows raw values. Reset always goes to hardware `1.0`. **LLM NOTE:** A previous iteration tried to reverse-engineer Apple's zoom mapping (`defaultZoom = 2.0`, `displayZoom = hardware / defaultZoom`) to match the native camera app's labels. This broke repeatedly because `applyConstraints({ zoom })` behaves inconsistently across iOS versions, and the mapping logic created confusing display values (e.g. "0.5×" when the user expected "1.0×"). The simple approach — raw hardware values, reset to 1.0 — is the correct choice. Do not re-add display zoom mapping.
 
-**Tap-to-focus is best-effort:** True point-of-interest focus (focus on exact tap location) requires the ImageCapture API, which Safari doesn't support. The current implementation toggles `focusMode` between 'manual' and 'continuous' to force a refocus cycle. This works on some devices but not all. The visual focus ring (yellow square, iOS-style animation) always appears regardless, which provides useful UX feedback even without hardware focus control.
+**Tap-to-focus is best-effort:** The app now attempts multiple hardware focus strategies in order: ImageCapture point-of-interest focus, MediaTrack constraint-based point-of-interest/single-shot focus, then fallback autofocus refresh toggles. Safari/iOS still does not reliably expose true point-of-interest focus on all devices, so behavior varies by hardware/browser build.
 
 **iOS background uploads are unsolved:** Safari does not support Background Sync API. The `visibilitychange` flush approach was tested but iOS suspends the PWA before uploads complete. The app currently relies on foreground-only sync — photos queue in IndexedDB and upload when the user reopens the app. This works fine for typical use (field reps open the app, take photos, close it, reopen later), but photos won't upload while the app is in the background.
 
@@ -555,8 +555,8 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [x] Pinch-to-zoom with hardware zoom via `applyConstraints` + zoom level indicator with tap-to-reset
 - [x] Tap-to-focus with iOS-style yellow focus ring + hardware `focusMode` toggle (best-effort)
 - [x] iOS background upload via `visibilitychange` flush (parallel, fire-all-at-once) — **did not work reliably in practice, removed**
-- [x] Parallel foreground uploads (2 concurrent via `Promise.allSettled`)
-- [x] Cache version bumped to `shelftag-v13`
+- [x] Parallel foreground uploads (4 concurrent via `Promise.allSettled`)
+- [x] Cache version bumped to `shelftag-v14`
 - [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
 - [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
 - [ ] Custom domain setup (e.g. `shelftag.180snacks.com`)
