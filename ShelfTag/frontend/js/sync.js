@@ -28,7 +28,7 @@
 import { getPendingPhotos, updatePhotoStatus, deleteSyncedPhoto, getQueueStats, resetStuckPhotos } from './storage.js';
 
 const API_BASE = '';
-const MAX_CONCURRENT = 2;   // Parallel uploads in foreground
+const MAX_CONCURRENT = 4;   // Parallel uploads in foreground
 const UPLOAD_TIMEOUT = 60000; // 60 seconds per photo
 
 let isSyncing = false;
@@ -61,6 +61,7 @@ async function isBackendReachable() {
 async function uploadPhoto(photo) {
     try {
         await updatePhotoStatus(photo.id, 'syncing');
+        await notifyUI();
 
         const response = await fetch(`${API_BASE}/api/sync`, {
             method: 'POST',
@@ -76,6 +77,7 @@ async function uploadPhoto(photo) {
 
         // Worker received image — delete from local queue regardless of pipeline result
         await deleteSyncedPhoto(photo.id);
+        await notifyUI();
 
         if (result.success) {
             console.log(`[Sync] Photo #${photo.id} synced → ${result.extracted_data?.flavor || 'unknown'}`);
@@ -88,6 +90,7 @@ async function uploadPhoto(photo) {
     } catch (error) {
         // Network failure — reset to pending for retry
         await updatePhotoStatus(photo.id, 'pending');
+        await notifyUI();
         console.error(`[Sync] Photo #${photo.id} network error (will retry): ${error.message}`);
         return false;
     }
