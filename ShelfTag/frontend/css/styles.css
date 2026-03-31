@@ -87,7 +87,7 @@ html, body {
 }
 
 #flash.active {
-    animation: shutter-blink 0.3s ease-out forwards;
+    animation: shutter-blink 0.15s ease-out forwards;
 }
 
 @keyframes shutter-blink {
@@ -118,9 +118,11 @@ html, body {
     background: linear-gradient(transparent, rgba(0,0,0,0.6));
 }
 
-/* Left spacer — matches the width of the right container */
-.controls-spacer {
+/* Left container — matches the width of the right container */
+.controls-left {
     flex: 1;
+    display: flex;
+    justify-content: center;
 }
 
 /* Right container — holds zoom indicator, same flex as spacer to keep shutter centered */
@@ -166,6 +168,33 @@ html, body {
 
 #zoom-indicator:active {
     transform: scale(0.92);
+}
+
+/* ---- Gallery Upload Button ---- */
+#gallery-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    display: grid;
+    place-items: center;
+}
+
+#gallery-btn svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+    opacity: 0.92;
+}
+
+#gallery-btn:active {
+    transform: scale(0.92);
+}
+
+#gallery-input {
+    display: none;
 }
 
 
@@ -228,6 +257,16 @@ html, body {
 
 #connectivity.offline .dot {
     background: #ff3b30;
+}
+
+#app-version {
+    position: fixed;
+    top: calc(30px + env(safe-area-inset-top, 0px));
+    left: 24px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.55);
+    z-index: 60;
 }
 
 
@@ -322,6 +361,11 @@ html, body {
 #sync-badge.syncing {
     animation: pulse 1.2s ease-in-out infinite;
     background: #ff9500;
+}
+
+#sync-badge.processing {
+    animation: pulse 0.8s ease-in-out infinite;
+    background: #0a84ff;
 }
 
 @keyframes pulse {

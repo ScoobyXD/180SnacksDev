@@ -29,6 +29,7 @@
         <div class="dot"></div>
         <span id="connectivity-text">Online</span>
     </div>
+    <div id="app-version">v00.00</div>
 
     <!-- SYNC BADGE (top-right, tappable → queue modal) -->
     <div id="sync-badge">0</div>
@@ -76,7 +77,14 @@
 
     <!-- BOTTOM CONTROLS (shutter center, zoom indicator right) -->
     <div id="controls">
-        <div class="controls-spacer"></div>
+        <div class="controls-left">
+            <button id="gallery-btn" aria-label="Upload from gallery">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Zm1.5 0v8.65l3.13-2.94a1.5 1.5 0 0 1 2.04 0l2.3 2.16 2.97-2.79a1.5 1.5 0 0 1 2.06.03l.5.5V5.5h-13Zm13 13v-5.27l-1.53-1.44-2.98 2.8a1.5 1.5 0 0 1-2.04 0l-2.3-2.16-4.15 3.9V18.5h13ZM8.75 10a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Z"/>
+                </svg>
+            </button>
+            <input type="file" id="gallery-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple>
+        </div>
         <button id="shutter-btn" aria-label="Take photo"></button>
         <div class="controls-right">
             <div id="zoom-indicator" class="hidden">1.0×</div>
