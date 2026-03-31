@@ -76,40 +76,50 @@ function handleHealth(env) {
 async function handleSync(request, env) {
     // ---- Parse request ----
     const body = await request.json();
-    const { image_base64, metadata } = body;
+    const { image_base64, images_base64, metadata } = body;
+    const imageList = Array.isArray(images_base64) && images_base64.length > 0
+        ? images_base64
+        : (image_base64 ? [image_base64] : []);
 
-    if (!image_base64 || !metadata) {
+    if (imageList.length === 0 || !metadata) {
         return Response.json(
-            { success: false, error: 'Missing image_base64 or metadata' },
+            { success: false, error: 'Missing images_base64/image_base64 or metadata' },
             { status: 400 }
         );
     }
 
-    console.log(`[Sync] Processing photo from ${metadata.user_name} at ${metadata.retailer}`);
+    console.log(`[Sync] Processing ${imageList.length} image(s) from ${metadata.user_name} at ${metadata.retailer}`);
 
-    // ---- Step 1: Store image in R2 (with metadata for debugging) ----
-    const filename = `${crypto.randomUUID()}.jpg`;
-    const imageBytes = base64ToBytes(image_base64);
+    // ---- Step 1: Store images in R2 (with metadata for debugging) ----
+    const filenames = [];
+    const imageUrls = [];
+    for (let i = 0; i < imageList.length; i++) {
+        const filename = `${crypto.randomUUID()}-${i + 1}.jpg`;
+        const imageBytes = base64ToBytes(imageList[i]);
 
-    await env.IMAGES.put(filename, imageBytes, {
-        httpMetadata: { contentType: 'image/jpeg' },
-        customMetadata: {
-            user_name: metadata.user_name || '',
-            retailer: metadata.retailer || '',
-            timestamp: metadata.timestamp || '',
-            latitude: String(metadata.latitude || ''),
-            longitude: String(metadata.longitude || ''),
-        },
-    });
+        await env.IMAGES.put(filename, imageBytes, {
+            httpMetadata: { contentType: 'image/jpeg' },
+            customMetadata: {
+                user_name: metadata.user_name || '',
+                retailer: metadata.retailer || '',
+                timestamp: metadata.timestamp || '',
+                latitude: String(metadata.latitude || ''),
+                longitude: String(metadata.longitude || ''),
+                capture_mode: imageList.length > 1 ? 'multi' : 'single',
+                image_index: String(i + 1),
+                image_count: String(imageList.length),
+            },
+        });
 
-    // Public R2 URL — Airtable downloads directly from R2, bypassing Worker bot protection
-    const imageUrl = `https://pub-a9ceafcd290c4d5eb643aeac5b4a67d1.r2.dev/${filename}`;
-    console.log(`[Sync] Image stored in R2: ${filename} (${(imageBytes.byteLength / 1024).toFixed(0)} KB)`);
+        filenames.push(filename);
+        imageUrls.push(`https://pub-a9ceafcd290c4d5eb643aeac5b4a67d1.r2.dev/${filename}`);
+        console.log(`[Sync] Image stored in R2: ${filename} (${(imageBytes.byteLength / 1024).toFixed(0)} KB)`);
+    }
 
     // ---- Step 2: Extract product data with Gemini Flash Lite ----
     let extraction = null;
     try {
-        extraction = await extractWithGemini(image_base64, env.GEMINI_API_KEY);
+        extraction = await extractWithGemini(imageList, env.GEMINI_API_KEY);
         console.log(
             `[Sync] Extracted: ${extraction.flavor || 'unknown'} | ${extraction.brand || 'unknown'} | `
             + `${extraction.nw_oz || '?'}oz | regular:$${extraction.retail_regular || '?'} | `
@@ -120,7 +130,7 @@ async function handleSync(request, env) {
         return Response.json({
             success: false,
             error: `Gemini extraction failed: ${geminiError.message}`,
-            r2_filename: filename,
+            r2_filenames: filenames,
         });
     }
 
@@ -129,7 +139,7 @@ async function handleSync(request, env) {
         const recordId = await createAirtableRecord(
             extraction,
             metadata,
-            imageUrl,
+            imageUrls,
             env.AIRTABLE_PAT,
             env.AIRTABLE_BASE_ID,
             env.AIRTABLE_TABLE_ID
@@ -139,6 +149,7 @@ async function handleSync(request, env) {
         return Response.json({
             success: true,
             airtable_record_id: recordId,
+            image_count: imageList.length,
             extracted_data: extraction,
         });
     } catch (airtableError) {
@@ -147,7 +158,7 @@ async function handleSync(request, env) {
             success: false,
             error: `Airtable failed: ${airtableError.message}`,
             extracted_data: extraction,
-            r2_filename: filename,
+            r2_filenames: filenames,
         });
     }
 }
@@ -157,8 +168,8 @@ async function handleSync(request, env) {
 // GEMINI FLASH LITE — Image → Structured Product Data
 // ============================================================================
 
-const EXTRACTION_PROMPT = `You are analyzing a photo of a snack product on a retail store shelf.
-Your job is to extract specific product information from the packaging and price tag visible in the image.
+const EXTRACTION_PROMPT = `You are analyzing one or more photos of the SAME snack product on a retail store shelf.
+Your job is to combine information across all provided images and extract specific product information.
 
 Extract the following fields:
 
@@ -197,6 +208,7 @@ Extract the following fields:
 
 IMPORTANT RULES:
 - If you cannot determine a field from the image, set it to null. Do NOT guess.
+- If multiple photos are provided, they all represent the same product. Fuse all evidence before deciding.
 - If multiple products are visible, extract data for the product that is most prominent/centered in the image.
 - Focus on the FRONT of the package and the SHELF PRICE TAG.
 
@@ -218,20 +230,19 @@ const RESPONSE_SCHEMA = {
 };
 
 
-async function extractWithGemini(imageBase64, apiKey) {
+async function extractWithGemini(imageBase64List, apiKey) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`;
+    const parts = imageBase64List.map((imageBase64) => ({
+        inline_data: {
+            mime_type: "image/jpeg",
+            data: imageBase64,
+        }
+    }));
+    parts.push({ text: EXTRACTION_PROMPT });
 
     const payload = {
         contents: [{
-            parts: [
-                {
-                    inline_data: {
-                        mime_type: "image/jpeg",
-                        data: imageBase64,
-                    }
-                },
-                { text: EXTRACTION_PROMPT }
-            ]
+            parts
         }],
         generationConfig: {
             response_mime_type: "application/json",
@@ -267,7 +278,7 @@ async function extractWithGemini(imageBase64, apiKey) {
 // AIRTABLE — Create Record
 // ============================================================================
 
-async function createAirtableRecord(extraction, metadata, imageUrl, pat, baseId, tableId) {
+async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId, tableId) {
     // Detect international currency from coordinates
     let currencyNote = null;
     if (metadata.latitude != null && metadata.longitude != null) {
@@ -305,7 +316,7 @@ async function createAirtableRecord(extraction, metadata, imageUrl, pat, baseId,
     }
 
     // Image attachment — Airtable downloads from this URL
-    fields["Image"] = [{ url: imageUrl }]; // Fixed from "IMage" typo
+    fields["Image"] = imageUrls.map((url) => ({ url })); // Multiple images in single row supported
 
     // Currency note
     if (currencyNote) fields["Notes"] = currencyNote;
