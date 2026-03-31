@@ -43,6 +43,7 @@ const MAX_GALLERY_UPLOAD_COUNT = 20;
 
 let cameraStream = null;
 let isCapturing = false;
+let isGalleryQueueing = false;
 
 // Gesture state
 let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
@@ -231,29 +232,36 @@ async function handleGallerySelection(event) {
         return;
     }
 
-    for (let i = 0; i < imageFiles.length; i++) {
-        const file = imageFiles[i];
+    try {
+        isGalleryQueueing = true;
+        updateSyncBadge(await getQueueStats());
 
-        try {
-            const imageBase64 = await readFileAsBase64(file);
-            const position = getCurrentPosition();
+        for (let i = 0; i < imageFiles.length; i++) {
+            const file = imageFiles[i];
 
-            const metadata = {
-                user_name: userName,
-                retailer,
-                timestamp: formatTimestamp(new Date(file.lastModified || Date.now())),
-                latitude: position?.latitude || null,
-                longitude: position?.longitude || null,
-                source: 'gallery',
-                original_filename: file.name,
-            };
+            try {
+                const imageBase64 = await readFileAsBase64(file);
+                const position = getCurrentPosition();
 
-            await queuePhoto(imageBase64, metadata);
-            showToast(`Queued ${i + 1}/${imageFiles.length}`);
-        } catch (error) {
-            console.error('[App] Failed to queue gallery photo:', file.name, error);
-            showToast(`Failed: ${file.name}`);
+                const metadata = {
+                    user_name: userName,
+                    retailer,
+                    timestamp: formatTimestamp(new Date(file.lastModified || Date.now())),
+                    latitude: position?.latitude || null,
+                    longitude: position?.longitude || null,
+                    source: 'gallery',
+                    original_filename: file.name,
+                };
+
+                await queuePhoto(imageBase64, metadata);
+                showToast(`Queued ${i + 1}/${imageFiles.length}`);
+            } catch (error) {
+                console.error('[App] Failed to queue gallery photo:', file.name, error);
+                showToast(`Failed: ${file.name}`);
+            }
         }
+    } finally {
+        isGalleryQueueing = false;
     }
 
     const stats = await getQueueStats();
@@ -412,9 +420,11 @@ function updateSyncBadge(stats) {
     const count = stats.pending;
 
     badge.textContent = count;
-    badge.classList.remove('pending', 'syncing');
+    badge.classList.remove('pending', 'syncing', 'processing');
 
-    if (count > 0) {
+    if (isGalleryQueueing) {
+        badge.classList.add('processing');
+    } else if (count > 0) {
         badge.classList.add(stats.syncing > 0 ? 'syncing' : 'pending');
     }
 }
@@ -517,7 +527,15 @@ function setupEventHandlers() {
     // Gallery upload (bottom-left icon).
     document.getElementById('gallery-input').addEventListener('change', handleGallerySelection);
     document.getElementById('gallery-btn').addEventListener('click', () => {
-        document.getElementById('gallery-input').click();
+        const input = document.getElementById('gallery-input');
+
+        // Best-effort path toward opening directly into the media picker UI.
+        // Browser/OS may still show source options depending on platform policy.
+        if (typeof input.showPicker === 'function') {
+            input.showPicker();
+        } else {
+            input.click();
+        }
     });
 }
 

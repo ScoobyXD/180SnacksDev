@@ -178,10 +178,15 @@ html, body {
     border: 1px solid rgba(255,255,255,0.35);
     background: rgba(255,255,255,0.15);
     color: #fff;
-    font-size: 20px;
-    line-height: 1;
     display: grid;
     place-items: center;
+}
+
+#gallery-btn svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+    opacity: 0.92;
 }
 
 #gallery-btn:active {
@@ -257,7 +262,7 @@ html, body {
 #app-version {
     position: fixed;
     top: calc(30px + env(safe-area-inset-top, 0px));
-    left: 12px;
+    left: 24px;
     font-size: 10px;
     font-weight: 600;
     color: rgba(255,255,255,0.55);
@@ -356,6 +361,11 @@ html, body {
 #sync-badge.syncing {
     animation: pulse 1.2s ease-in-out infinite;
     background: #ff9500;
+}
+
+#sync-badge.processing {
+    animation: pulse 0.8s ease-in-out infinite;
+    background: #0a84ff;
 }
 
 @keyframes pulse {
