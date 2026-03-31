@@ -5,7 +5,7 @@
  * 
  * SYNC STRATEGY:
  * 
- * Adaptive parallel uploads (1-4 concurrent depending on device/network) triggered by:
+ * Parallel uploads (4 concurrent) triggered by:
  * - Photo capture (immediate)
  * - Device comes online
  * - App returns to foreground (visibilitychange)
@@ -28,7 +28,7 @@
 import { getPendingPhotos, updatePhotoStatus, deleteSyncedPhoto, getQueueStats, resetStuckPhotos } from './storage.js';
 
 const API_BASE = '';
-const MAX_CONCURRENT = 4;   // Upper bound for adaptive foreground concurrency
+const MAX_CONCURRENT = 4;   // Fixed foreground concurrency
 const UPLOAD_TIMEOUT = 60000; // 60 seconds per photo
 
 let isSyncing = false;
@@ -142,7 +142,7 @@ async function uploadPhoto(photo) {
 
 /**
  * Process the photo upload queue.
- * Uploads photos in adaptive parallel batches.
+ * Uploads photos in fixed-size parallel batches.
  */
 export async function processQueue() {
     if (isSyncing) {
@@ -178,8 +178,8 @@ export async function processQueue() {
         const adaptiveConcurrency = getAdaptiveConcurrency();
         console.log(`[Sync] Processing ${pendingPhotos.length} pending photos (${adaptiveConcurrency} concurrent, adaptive)...`);
 
-        // Process in adaptive-sized batches
-        for (let i = 0; i < pendingPhotos.length; i += adaptiveConcurrency) {
+        // Process in fixed-size batches
+        for (let i = 0; i < pendingPhotos.length; i += MAX_CONCURRENT) {
             if (!navigator.onLine) {
                 console.log('[Sync] Lost connectivity, stopping sync');
                 break;

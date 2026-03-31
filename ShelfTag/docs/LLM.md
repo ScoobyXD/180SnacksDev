@@ -428,7 +428,7 @@ npx wrangler deploy
 
 That's it — one command pushes both the Worker code and all `frontend/` static assets together. Changes are live within seconds.
 
-If you update the service worker cache version in `sw.js` (e.g. `shelftag-v14` → `shelftag-v15`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches. Also bump the in-app version label (`APP_VERSION` in `frontend/js/app.js`) by **0.01** every deploy.
+If you update the service worker cache version in `sw.js` (e.g. `shelftag-v15` → `shelftag-v16`), phones will pull the new files on next app open. Bump the version any time you change CSS/JS/HTML that the SW caches. Also bump the in-app version label (`APP_VERSION` in `frontend/js/app.js`) by **0.01** every deploy.
 
 The Worker is live at: `shelftagdev.jonathankim829.workers.dev`
 
@@ -519,7 +519,7 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Service worker update behavior:** ShelfTag now sends `SKIP_WAITING` to newly installed workers and reloads on `controllerchange`, so new deployments should activate on the next open/reload instead of requiring multiple full app closes. Still bump `CACHE_VERSION` in `sw.js` whenever frontend assets change.
 
-**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`; current is `v01.04`). Every deploy that changes frontend behavior must increment by **0.01** and keep this aligned with the service worker cache bump.
+**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`; current is `v01.05`). Every deploy that changes frontend behavior must increment by **0.01** and keep this aligned with the service worker cache bump.
 
 **Gallery upload memory guardrail:** iOS Safari PWAs can crash under high in-memory image loads. Keep batch uploads capped and process gallery files sequentially (never decode dozens of full-res photos in parallel). Current cap: 30 selected images per batch.
 
@@ -555,8 +555,8 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [x] Pinch-to-zoom with hardware zoom via `applyConstraints` + zoom level indicator with tap-to-reset
 - [x] Tap-to-focus with iOS-style yellow focus ring + hardware `focusMode` toggle (best-effort)
 - [x] iOS background upload via `visibilitychange` flush (parallel, fire-all-at-once) — **did not work reliably in practice, removed**
-- [x] Parallel foreground uploads (adaptive concurrency, max 4 via `Promise.allSettled`)
-- [x] Cache version bumped to `shelftag-v15`
+- [x] Parallel foreground uploads (fixed 4 concurrent via `Promise.allSettled`)
+- [x] Cache version bumped to `shelftag-v16`
 - [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
 - [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
 - [ ] Custom domain setup (e.g. `shelftag.180snacks.com`)

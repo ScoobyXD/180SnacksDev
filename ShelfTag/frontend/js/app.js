@@ -29,7 +29,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
  * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
  */
-const APP_VERSION = 'v01.04';
+const APP_VERSION = 'v01.05';
 
 /**
  * iOS Safari / PWA memory guardrail:
@@ -44,6 +44,7 @@ const MAX_GALLERY_UPLOAD_COUNT = 30;
 let cameraStream = null;
 let isCapturing = false;
 let isGalleryQueueing = false;
+let queueStatsInterval = null;
 
 // Gesture state
 let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
@@ -184,8 +185,6 @@ async function handleCapture() {
 
         const stats = await getQueueStats();
         updateSyncBadge(stats);
-        showToast('Photo captured!');
-
         processQueue();
 
     } catch (error) {
@@ -429,6 +428,9 @@ function updateSyncBadge(stats) {
     } else if (count > 0) {
         badge.classList.add('pending');
     }
+
+    // Keep queue modal live while open.
+    updateQueueModalStats(stats);
 }
 
 function showToast(message) {
@@ -466,15 +468,38 @@ function renderAppVersion() {
 
 function openQueueModal() {
     document.getElementById('queue-modal').classList.remove('hidden');
-    getQueueStats().then(stats => {
-        document.getElementById('stat-pending').textContent = stats.pending;
-        document.getElementById('stat-syncing').textContent = stats.syncing;
-        document.getElementById('stat-failed').textContent = stats.failed;
-    });
+    refreshQueueModalStats();
+    processQueue(); // Ensure sync continues while modal is visible.
+
+    if (queueStatsInterval) clearInterval(queueStatsInterval);
+    queueStatsInterval = setInterval(refreshQueueModalStats, 750);
 }
 
 function closeQueueModal() {
     document.getElementById('queue-modal').classList.add('hidden');
+    if (queueStatsInterval) {
+        clearInterval(queueStatsInterval);
+        queueStatsInterval = null;
+    }
+}
+
+async function refreshQueueModalStats() {
+    const stats = await getQueueStats();
+    updateQueueModalStats(stats);
+}
+
+function updateQueueModalStats(stats) {
+    const modal = document.getElementById('queue-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+
+    document.getElementById('stat-pending').textContent = stats.pending;
+    document.getElementById('stat-syncing').textContent = stats.syncing;
+    document.getElementById('stat-failed').textContent = stats.failed;
+
+    const spinner = document.getElementById('queue-upload-spinner');
+    if (spinner) {
+        spinner.classList.toggle('active', stats.syncing > 0 || isGalleryQueueing);
+    }
 }
 
 async function handleClearQueue() {
