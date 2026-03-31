@@ -5,7 +5,7 @@
  * 
  * SYNC STRATEGY:
  * 
- * Parallel uploads (up to 2 concurrent) triggered by:
+ * Adaptive parallel uploads (1-4 concurrent depending on device/network) triggered by:
  * - Photo capture (immediate)
  * - Device comes online
  * - App returns to foreground (visibilitychange)
@@ -28,7 +28,7 @@
 import { getPendingPhotos, updatePhotoStatus, deleteSyncedPhoto, getQueueStats, resetStuckPhotos } from './storage.js';
 
 const API_BASE = '';
-const MAX_CONCURRENT = 4;   // Parallel uploads in foreground
+const MAX_CONCURRENT = 4;   // Upper bound for adaptive foreground concurrency
 const UPLOAD_TIMEOUT = 60000; // 60 seconds per photo
 
 let isSyncing = false;
@@ -50,6 +50,49 @@ async function isBackendReachable() {
     } catch {
         return false;
     }
+}
+
+/**
+ * Choose upload concurrency adaptively for mobile stability.
+ *
+ * Heuristics:
+ * - Honor Data Saver aggressively.
+ * - Use connection quality (2g/3g/4g) when available.
+ * - Reduce parallelism on lower-memory devices.
+ * - Cap iOS Safari/PWA slightly lower for stability.
+ */
+function getAdaptiveConcurrency() {
+    let concurrent = MAX_CONCURRENT;
+
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const effectiveType = connection?.effectiveType;
+    const saveData = Boolean(connection?.saveData);
+    const deviceMemory = navigator.deviceMemory || null;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+    if (saveData) {
+        concurrent = Math.min(concurrent, 2);
+    }
+
+    if (effectiveType === 'slow-2g' || effectiveType === '2g') {
+        concurrent = 1;
+    } else if (effectiveType === '3g') {
+        concurrent = Math.min(concurrent, 2);
+    } else if (effectiveType === '4g') {
+        concurrent = Math.min(concurrent, MAX_CONCURRENT);
+    }
+
+    if (deviceMemory != null) {
+        if (deviceMemory <= 1) concurrent = Math.min(concurrent, 1);
+        else if (deviceMemory <= 2) concurrent = Math.min(concurrent, 2);
+        else if (deviceMemory <= 4) concurrent = Math.min(concurrent, 3);
+    }
+
+    if (isIOS) {
+        concurrent = Math.min(concurrent, 3);
+    }
+
+    return Math.max(1, Math.min(MAX_CONCURRENT, concurrent));
 }
 
 
@@ -99,7 +142,7 @@ async function uploadPhoto(photo) {
 
 /**
  * Process the photo upload queue.
- * Uploads up to MAX_CONCURRENT photos in parallel.
+ * Uploads photos in adaptive parallel batches.
  */
 export async function processQueue() {
     if (isSyncing) {
@@ -132,16 +175,17 @@ export async function processQueue() {
             return;
         }
 
-        console.log(`[Sync] Processing ${pendingPhotos.length} pending photos (${MAX_CONCURRENT} concurrent)...`);
+        const adaptiveConcurrency = getAdaptiveConcurrency();
+        console.log(`[Sync] Processing ${pendingPhotos.length} pending photos (${adaptiveConcurrency} concurrent, adaptive)...`);
 
-        // Process in batches of MAX_CONCURRENT
-        for (let i = 0; i < pendingPhotos.length; i += MAX_CONCURRENT) {
+        // Process in adaptive-sized batches
+        for (let i = 0; i < pendingPhotos.length; i += adaptiveConcurrency) {
             if (!navigator.onLine) {
                 console.log('[Sync] Lost connectivity, stopping sync');
                 break;
             }
 
-            const batch = pendingPhotos.slice(i, i + MAX_CONCURRENT);
+            const batch = pendingPhotos.slice(i, i + adaptiveConcurrency);
             const results = await Promise.allSettled(batch.map(uploadPhoto));
 
             // If any upload failed due to network, stop the batch

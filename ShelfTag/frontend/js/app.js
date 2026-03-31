@@ -29,7 +29,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
  * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
  */
-const APP_VERSION = 'v01.03';
+const APP_VERSION = 'v01.04';
 
 /**
  * iOS Safari / PWA memory guardrail:
