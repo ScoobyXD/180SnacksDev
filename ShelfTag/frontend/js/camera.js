@@ -18,6 +18,7 @@
 let zoomCapabilities = null;  // { min, max, step } or null if unsupported
 let currentZoom = 1;
 let activeTrack = null;       // Reference to the active video track
+let imageCapture = null;      // Optional ImageCapture API handle (not supported on many iOS builds)
 
 
 // ============================================================================
@@ -45,6 +46,15 @@ export async function initCamera(videoElement) {
         activeTrack = stream.getVideoTracks()[0];
         const settings = activeTrack.getSettings();
         console.log(`[Camera] Initialized: ${settings.width}x${settings.height}`);
+
+        // Best-effort: ImageCapture can provide stronger focus controls on supporting browsers.
+        if ('ImageCapture' in window) {
+            try {
+                imageCapture = new ImageCapture(activeTrack);
+            } catch {
+                imageCapture = null;
+            }
+        }
 
         detectZoomCapabilities();
 
@@ -127,11 +137,12 @@ export async function resetZoom() {
 // ============================================================================
 
 /**
- * Attempt to trigger a refocus cycle.
- * 
- * Toggles focusMode between manual and continuous to force the camera
- * to re-evaluate focus. Visual focus ring is handled by app.js.
- * True point-of-interest focus requires ImageCapture API (Safari doesn't support it).
+ * Attempt to trigger a hardware refocus at the tapped location.
+ *
+ * Strategy order:
+ * 1) ImageCapture.setOptions(pointsOfInterest + single-shot focus) when available
+ * 2) MediaTrack constraints with pointsOfInterest / single-shot focus
+ * 3) Fallback: focusMode toggle to force a generic refocus cycle
  */
 export async function tapToFocus(x, y) {
     if (!activeTrack) return false;
@@ -139,6 +150,37 @@ export async function tapToFocus(x, y) {
     try {
         const capabilities = activeTrack.getCapabilities?.() || {};
 
+        // 1) Best-quality path: ImageCapture API with tap coordinates
+        if (imageCapture?.setOptions) {
+            try {
+                await imageCapture.setOptions({
+                    pointsOfInterest: [{ x, y }],
+                    focusMode: 'single-shot',
+                });
+                console.log('[Camera] Focus via ImageCapture pointsOfInterest');
+                return true;
+            } catch {
+                // Continue to next strategy
+            }
+        }
+
+        // 2) Track constraints with explicit point-of-interest where supported
+        const advanced = [];
+        if (capabilities.pointsOfInterest) {
+            advanced.push({ pointsOfInterest: [{ x, y }] });
+        }
+
+        if (capabilities.focusMode?.includes('single-shot')) {
+            advanced.push({ focusMode: 'single-shot' });
+        }
+
+        if (advanced.length > 0) {
+            await activeTrack.applyConstraints({ advanced });
+            console.log('[Camera] Focus via MediaTrack constraints');
+            return true;
+        }
+
+        // 3) Fallback behavior for Safari/iOS where point-of-interest focus is unavailable
         if (capabilities.focusMode) {
             const modes = capabilities.focusMode;
             if (modes.includes('manual') && modes.includes('continuous')) {
@@ -146,6 +188,12 @@ export async function tapToFocus(x, y) {
                 await new Promise(r => setTimeout(r, 100));
                 await activeTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
                 console.log('[Camera] Hardware refocus triggered');
+                return true;
+            }
+
+            if (modes.includes('continuous')) {
+                await activeTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                console.log('[Camera] Continuous autofocus refresh triggered');
                 return true;
             }
         }
@@ -190,6 +238,7 @@ export function stopCamera(stream) {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
         activeTrack = null;
+        imageCapture = null;
         zoomCapabilities = null;
         currentZoom = 1;
         console.log('[Camera] Stream stopped');
