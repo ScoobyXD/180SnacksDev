@@ -177,8 +177,8 @@ html, body {
 }
 
 #capture-mode-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
 }
 
 #capture-mode-btn.multi {
@@ -397,7 +397,8 @@ html, body {
     margin-bottom: 1px;
 }
 
-#info-box input {
+#info-box input,
+#info-box select {
     display: block;
     width: 100%;
     background: transparent;
@@ -424,8 +425,23 @@ html, body {
     font-size: 11px;
 }
 
-#info-box input:focus {
+#info-box input:focus,
+#info-box select:focus {
     border-bottom-color: #4af;
+}
+
+#info-box select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.75) 50%), linear-gradient(135deg, rgba(255,255,255,0.75) 50%, transparent 50%);
+    background-position: calc(100% - 13px) calc(50% - 2px), calc(100% - 8px) calc(50% - 2px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 22px;
+}
+
+#info-box select option {
+    color: #111;
 }
 
 

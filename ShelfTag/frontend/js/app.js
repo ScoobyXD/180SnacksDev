@@ -29,13 +29,30 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Keep the 2-digit major + 2-digit minor format (v01.00, v01.01, v01.02...).
  * - Keep this aligned with CACHE_VERSION in /frontend/sw.js.
  */
-const APP_VERSION = 'v01.06';
+const APP_VERSION = 'v01.07';
 
 /**
  * iOS Safari / PWA memory guardrail:
  * process selected gallery images sequentially and cap selection size.
  */
 const MAX_GALLERY_UPLOAD_COUNT = 30;
+
+const RETAILER_OPTIONS = [
+    'Costco LA',
+    'Costco BA',
+    'Costco SD',
+    'Costco NW',
+    'Costco TX',
+    'Costco MW',
+    'Costco NE',
+    'Costco SE',
+    'TJ Maxx',
+    "Marshall's",
+    'HomeGoods',
+    'Ross',
+    'Dollar Tree',
+    'Grocery Outlet',
+];
 
 // ============================================================================
 // APP STATE
@@ -73,6 +90,7 @@ async function init() {
         return;
     }
 
+    initRetailerOptions();
     loadUserPreferences();
 
     initSync();
@@ -140,7 +158,26 @@ async function registerServiceWorker() {
 
 function loadUserPreferences() {
     document.getElementById('user-name').value = getUserName();
-    document.getElementById('retailer-name').value = getRetailer();
+
+    const retailerSelect = document.getElementById('retailer-name');
+    const savedRetailer = getRetailer();
+    if (savedRetailer && RETAILER_OPTIONS.includes(savedRetailer)) {
+        retailerSelect.value = savedRetailer;
+    } else {
+        retailerSelect.value = '';
+    }
+}
+
+function initRetailerOptions() {
+    const retailerSelect = document.getElementById('retailer-name');
+    if (!retailerSelect) return;
+
+    RETAILER_OPTIONS.forEach((retailer) => {
+        const option = document.createElement('option');
+        option.value = retailer;
+        option.textContent = retailer;
+        retailerSelect.appendChild(option);
+    });
 }
 
 function handleNameChange(event) {
@@ -148,7 +185,7 @@ function handleNameChange(event) {
 }
 
 function handleRetailerChange(event) {
-    saveRetailer(event.target.value.trim());
+    saveRetailer(event.target.value);
 }
 
 
@@ -459,7 +496,7 @@ function renderCaptureModeButton() {
     const isMulti = captureMode === 'multi';
     modeBtn.innerHTML = isMulti
         ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="6" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="10.7" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="15.4" width="6" height="2.6" rx="1" fill="currentColor"/></svg>'
-        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4.5" width="14" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.1 9.4h1.9v6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.1 10.7l1.2-1.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="4.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.1 9.4h1.9v6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.1 10.7l1.2-1.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     modeBtn.classList.toggle('multi', isMulti);
     modeBtn.setAttribute('aria-label', isMulti ? 'Switch to single mode' : 'Switch to multi mode');
 }
