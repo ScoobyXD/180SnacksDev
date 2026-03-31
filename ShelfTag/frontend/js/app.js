@@ -459,9 +459,21 @@ function renderCaptureModeButton() {
     const isMulti = captureMode === 'multi';
     modeBtn.innerHTML = isMulti
         ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="6" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="10.7" width="6" height="2.6" rx="1" fill="currentColor"/><rect x="9" y="15.4" width="6" height="2.6" rx="1" fill="currentColor"/></svg>'
-        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4 9.5a2.5 2.5 0 0 1 2.5-2.5h2l1.2-2h4.6l1.2 2h2A2.5 2.5 0 0 1 20 9.5v7A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-7Z"/><circle cx="12" cy="13" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4.5" width="14" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.1 9.4h1.9v6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.1 10.7l1.2-1.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     modeBtn.classList.toggle('multi', isMulti);
     modeBtn.setAttribute('aria-label', isMulti ? 'Switch to single mode' : 'Switch to multi mode');
+}
+
+
+function positionMultiTray() {
+    const tray = document.getElementById('multi-tray');
+    const modeBtn = document.getElementById('capture-mode-btn');
+    if (!tray || !modeBtn) return;
+
+    const modeRect = modeBtn.getBoundingClientRect();
+    const trayWidth = tray.offsetWidth || 56;
+    const left = modeRect.left + (modeRect.width / 2) - (trayWidth / 2);
+    tray.style.left = `${Math.max(8, left)}px`;
 }
 
 function renderMultiTray() {
@@ -473,6 +485,7 @@ function renderMultiTray() {
 
     const isMulti = captureMode === 'multi';
     tray.classList.toggle('hidden', !isMulti);
+    positionMultiTray();
 
     const isFull = multiTrayImages.length >= 4;
     shutterBtn.classList.toggle('disabled-multi', isMulti && isFull);
@@ -713,6 +726,7 @@ function setupEventHandlers() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', positionMultiTray);
 
 window.addEventListener('beforeunload', () => {
     stopCamera(cameraStream);
