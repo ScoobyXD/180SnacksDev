@@ -7,7 +7,8 @@
     "auth:setup": "node --loader ts-node/esm src/authSetup.ts",
     "codegen": "playwright codegen https://advantage.iriworldwide.com/unify-CRX/plus/landing/0",
     "run": "node --loader ts-node/esm src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "record:auth": "node --loader ts-node/esm src/recordFromAuth.ts"
   },
   "dependencies": {
     "playwright": "^1.54.2"

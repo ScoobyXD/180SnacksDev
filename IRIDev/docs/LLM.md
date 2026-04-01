@@ -146,3 +146,15 @@ If `npm run run -- --mode=dom` succeeds in a few hundred milliseconds, it likely
 
 - The runner now throws if DOM/network extraction returns zero records.
 - Fix by adding your real post-login report-navigation steps from codegen in `src/index.ts` before extraction.
+
+## Recommended Workflow (avoid codegen re-login confusion)
+`npm run codegen` opens a fresh browser context, so it may still show login even after `auth:setup`.
+
+Use this sequence instead:
+1. `npm run auth:setup` and complete login/MFA once.
+2. `npm run record:auth` to open browser **with saved storageState** and Playwright Inspector enabled.
+3. In Inspector, click through the exact report workflow.
+4. Copy generated actions into the TODO block in `src/index.ts`.
+5. Run `npm run run -- --mode=dom`.
+
+This keeps recording and extraction in the same authenticated model.
