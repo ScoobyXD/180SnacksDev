@@ -195,3 +195,13 @@ If auth state was not saved because `auth:setup` was left before pressing Enter,
 2. Local machine Downloads folder: `<home>/Downloads/<filename>`
 
 This avoids temporary Playwright download files disappearing when browser context closes.
+
+### Blank white page at `/unify-CRX/plus/`
+This usually means saved auth state is expired/invalid.
+
+- Re-run `npm run auth:setup`
+- Complete login/MFA
+- Return to terminal and press Enter to save state
+- Re-run extractor command
+
+The runner now checks for this condition and fails fast with a clear auth-refresh message.

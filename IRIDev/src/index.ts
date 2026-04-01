@@ -79,6 +79,27 @@ async function runDownloadWorkflow(page: Page): Promise<Record<string, unknown>>
   };
 }
 
+
+async function assertAuthenticatedPage(page: Page): Promise<void> {
+  await page.waitForLoadState('domcontentloaded');
+  const currentUrl = page.url();
+
+  const loginVisible = await page
+    .locator('input[placeholder="User ID"], input[type="password"]')
+    .first()
+    .isVisible({ timeout: 2000 })
+    .catch(() => false);
+
+  const bodyText = await page.locator('body').innerText().catch(() => '');
+  const isBlank = bodyText.trim().length === 0;
+
+  if (loginVisible || isBlank || /\/unify-CRX\/plus\/?$/i.test(currentUrl)) {
+    throw new Error(
+      `Session is not authenticated (or expired). Current URL: ${currentUrl}. Run "npm run auth:setup" again, finish login/MFA, then press Enter to resave playwright/.auth/iri.json.`
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const mode = getMode();
   await assertAuthStateExists();
@@ -95,6 +116,7 @@ async function main(): Promise<void> {
   const runStart = Date.now();
   try {
     await page.goto(iriUrl, { waitUntil: 'domcontentloaded' });
+    await assertAuthenticatedPage(page);
 
     installReadOnlyNetworkGuard(page, [
       /auth/i,
