@@ -177,8 +177,9 @@ So after finishing your click workflow, close recorder and open that file to cop
 ## Download behavior notes (important)
 - If automation runs on **your local PC**, downloaded files are on your PC.
 - Weird filenames (UUID-like, no `.xlsx`) usually mean server response does not set a friendly filename/extension.
-- In download mode implementation, we should capture Playwright `Download` objects and force a filename like `report-YYYY-MM-DD.xlsx` via `download.saveAs(...)`.
-- We should also inspect `Content-Type` and first bytes to verify true format (`xlsx`, `csv`, `zip`, `json`, etc.).
+- Download mode now captures the Playwright `Download` object and writes to `artifacts/downloads/` via `download.saveAs(...)`.
+- If server-provided filename has no extension, runner infers extension from file signature (e.g., ZIP header => `.xlsx`) before saving.
+- Metrics/raw artifact now include both `suggestedFilename` (server/browser) and `savedPath` (actual file on disk).
 
 ### `ENOENT` for `generated/iri.codegen.spec.ts`
 If `npm run record:auth` fails because `generated/` does not exist, the script now creates that folder automatically before launching codegen.
