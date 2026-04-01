@@ -1,0 +1,13 @@
+{
+  "name": "exceltoairtabledev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}

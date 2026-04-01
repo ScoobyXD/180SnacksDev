@@ -6,7 +6,16 @@
 ## Current Program State (as of April 1, 2026)
 - Browser automation for IRI login/navigation/export is in place.
 - Download capture is in place and artifacts are being saved locally.
-- Next milestone is **deterministic transform + Airtable upsert**.
+- Next milestone is extraction reliability hardening and cleaner handoff artifacts for downstream tools.
+
+
+## Tool Boundary (updated)
+IRIDev is responsible only for browser automation and report extraction from IRI to local artifacts/files.
+
+- Owns: login, navigation, export/download capture, extraction metrics/artifacts.
+- Does not own: downstream data normalization or Airtable sync pipeline logic.
+
+Downstream transformation/sync is handled by sibling project `ExcelToAirtableDev`.
 
 ## Non-Goals (prototype boundaries)
 - No AI agent behavior.
@@ -25,10 +34,8 @@ Build a **precise script** with fixed steps, fixed selectors, and explicit valid
 1. Log into IRI (browser automation).
 2. Navigate to target report flow.
 3. Extract report payload using one or more extraction techniques.
-4. Save raw/local outputs.
-5. Transform downloaded file rows into Airtable-ready normalized schema.
-6. Upsert normalized records to Airtable with idempotent key strategy.
-7. Produce run summary metrics.
+4. Save raw/local outputs for downstream processors.
+5. Produce run summary metrics.
 
 ## Read-Only Safety Policy
 After authentication and landing, switch into **strict read-only mode** for site interactions:
