@@ -54,12 +54,19 @@ async function main(): Promise<void> {
   const runStart = Date.now();
   try {
     await page.goto(iriUrl, { waitUntil: 'domcontentloaded' });
-
-    // TODO: Replace this block with your generated codegen post-login navigation flow.
-    // Suggested process:
-    // 1) run: npm run codegen (while already logged in)
-    // 2) copy the generated report-navigation steps into a helper and replace fragile selectors
-    // 3) keep strict read-only guard enabled during extraction
+    await page.goto('https://advantage.iriworldwide.com/unify-CRX/plus/landing/0');
+    await page.locator('.fa.fa-grid-round').click();
+    await page.getByText('Library').click();
+    await page.getByText('(BP226) US Costco Small Vendor Report_PREMIUM', { exact: true }).click();
+    await page.locator('a').filter({ hasText: /^More$/ }).click();
+    await page.locator('#SBMore-listUI').getByText('Export').click();
+    await page.getByText('week ending 03-29-2026').click();
+    await page.locator('#btnexport').click();
+    await page.locator('#export-form').getByText('OK').click();
+    await page.locator('#user div').filter({ hasText: /^1$/ }).click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#inbox').getByText('(BP226) US Costco Small').click();
+    const download = await downloadPromise;
 
     // In strict mode, only GET/HEAD/OPTIONS requests are allowed unless allowlisted.
     installReadOnlyNetworkGuard(page, [
