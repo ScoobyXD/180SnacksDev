@@ -3,29 +3,35 @@
 ## Purpose
 180 Snacks pays for IRI/Costco sales data, but the current workflow is manual and slow (screenshots, spreadsheet updates, chart creation, reports, PowerPoints). This project replaces manual handoffs with a deterministic browser automation tool.【Legacy context】
 
-## Non-Goals (for prototype v0)
+## Current Program State (as of April 1, 2026)
+- Browser automation for IRI login/navigation/export is in place.
+- Download capture is in place and artifacts are being saved locally.
+- Next milestone is **deterministic transform + Airtable upsert**.
+
+## Non-Goals (prototype boundaries)
 - No AI agent behavior.
 - No autonomous reasoning/planning.
-- No Airtable writes yet (read/extract only first).
 - No Appium/mobile scope for now.
 
 ## Tool Philosophy
 Build a **precise script** with fixed steps, fixed selectors, and explicit validation checks.
 
 - Deterministic workflow (click/type/extract/output).
-- Read-focused behavior only.
+- Read-focused behavior only during extraction.
 - Strong observability (logs, screenshots, traces, artifacts).
 - Fast retries on transient UI/network issues.
 
-## Initial Scope (v0)
+## Delivery Scope (updated)
 1. Log into IRI (browser automation).
-2. Navigate to one target report flow.
-3. Extract data via one or more extraction techniques.
-4. Save normalized outputs locally (JSON/CSV artifacts).
-5. Produce run summary metrics.
+2. Navigate to target report flow.
+3. Extract report payload using one or more extraction techniques.
+4. Save raw/local outputs.
+5. Transform downloaded file rows into Airtable-ready normalized schema.
+6. Upsert normalized records to Airtable with idempotent key strategy.
+7. Produce run summary metrics.
 
 ## Read-Only Safety Policy
-After authentication and landing, switch into **strict read-only mode**:
+After authentication and landing, switch into **strict read-only mode** for site interactions:
 
 - Block any click attempt where target text/attributes contain write verbs like:
   - `save`, `submit`, `delete`, `remove`, `update`, `create`, `edit`, `apply`, `confirm`, `ok`, `send`, `post`
@@ -36,7 +42,7 @@ After authentication and landing, switch into **strict read-only mode**:
 > Note: Login may require POST/network writes; strict mode starts **after login**.
 
 ## Extraction Techniques to Evaluate (Speed + Reliability)
-We will explicitly test these three techniques and compare outcomes:
+We explicitly support and compare these techniques:
 
 ### 1) DOM table extraction
 - Read rendered grid/table rows/cells from page DOM.
@@ -45,39 +51,133 @@ We will explicitly test these three techniques and compare outcomes:
 
 ### 2) Network interception
 - Listen to report API responses (JSON payloads) and parse directly.
-- Pros: usually fastest + most stable; cleaner data model.
+- Pros: often fastest + stable; cleaner data model.
 - Cons: requires identifying relevant API calls and response formats.
 
-### 3) File download automation
-- Trigger CSV/XLSX export, capture download, parse file.
-- Pros: often officially supported output.
+### 3) File download automation (**primary current path**)
+- Trigger XLSX export, capture download, parse file.
+- Pros: official report output format and easiest alignment with business reference files.
 - Cons: export latency and occasional format drift.
 
+## Canonical Airtable Output Schema (authoritative)
+The Airtable base must use the exact business columns represented in the reference output workbook:
+
+1. `Item`
+2. `Region`
+3. `Venue`
+4. `Week Ending`
+5. `Date`
+6. `Dollar Sales`
+7. `Unit Sales`
+8. `Inventory On Hand`
+9. `Average Price per Unit`
+10. `NSI Units On Hand`
+11. `Refund Units`
+12. `Average Inventory per Day`
+13. `Average Coupon Value`
+14. `Average Promoted Price`
+
+> Important: The output Excel in `references/Output File` is a schema reference. Destination is Airtable, not an output XLSX export.
+
+## Field Mapping Spec (Input ➜ Airtable)
+Input headers currently observed in report exports:
+- `Item`
+- `Venue`
+- `Dollar Sales`
+- `Unit Sales`
+- `Inventory On Hand`
+- `Average Price per Unit`
+- `NSI Units On Hand`
+- `Refund Units`
+- `Average Inventory per Day`
+- `Average Coupon Value`
+- `Average Promoted Price`
+
+Deterministic mapping rules:
+- `Item` (input) ➜ `Item` (airtable) using carry-forward when item cell is blank.
+- `Venue` (input) ➜ `Venue` (airtable), preserving raw venue label.
+- Numeric measure columns map 1:1 by column name.
+- `Region` is **derived** from row hierarchy context (see row-type rules below).
+- `Week Ending` is populated from run/report metadata (report selection context).
+- `Date` is populated from run/report metadata or downstream date normalization policy.
+
+Null/format handling:
+- Empty cells become null (not empty strings).
+- Numeric columns are stored as numbers.
+- Preserve negative values (returns/refunds) as negative numbers.
+
+## Row-Type Rules for IRI Hierarchy (deterministic)
+The input report is hierarchical by row and must be normalized with context propagation.
+
+### Row categories
+- **Item header row**: `Item` populated and `Venue` often `Total US by Region`.
+- **Region subtotal row**: `Item` blank and `Venue` appears as region-level label (e.g., indented region text).
+- **Warehouse/detail row**: `Item` blank and `Venue` appears as warehouse-level label.
+
+### Parsing/state rules
+- Maintain `currentItem` = last non-empty `Item` encountered.
+- Maintain `currentRegion` = last encountered region row within current item scope.
+- For item header rows, set `Item=currentItem`, `Region=null` unless explicit region exists.
+- For region rows, set `Region` to normalized region label; set `Venue` to original venue text.
+- For warehouse rows, inherit `Region=currentRegion`; set `Venue` to warehouse label.
+
+### Label normalization
+- Preserve original `Venue` text for traceability.
+- Optional normalized fields may be introduced later (`Venue Clean`, `Warehouse Number`) but do not replace core `Venue`.
+
+## Upsert Key Strategy for Airtable
+Use a deterministic composite key to make writes idempotent.
+
+Recommended key:
+- `record_key = hash(Item + '|' + Region + '|' + Venue + '|' + Week Ending)`
+
+Behavior:
+- If `record_key` exists: update record.
+- If `record_key` does not exist: create record.
+- Keep raw source metadata (`source_file`, `ingested_at`) for auditability.
+
+## Parabola vs Code-First Decision Guidance
+### Choose Parabola when
+- Non-engineers must own/edit mappings frequently.
+- You need rapid visual workflow iteration.
+- Data volume is moderate and rate limits are manageable.
+
+### Choose code-first (TypeScript in this repo) when
+- You need strict version control + deterministic reproducibility.
+- Hierarchy parsing logic is nuanced and evolving.
+- You need stronger testability, CI, and error observability.
+
+### Current recommendation
+Given deterministic engineering goals and existing TypeScript automation stack, **code-first transformation + Airtable API sync is the primary recommendation**, with Parabola as optional fallback for operations-led maintenance.
+
 ## Performance & Reliability Experiment Plan
-For each target report, run all supported extraction techniques over the same time window and log:
+For each target report, log:
 
 - End-to-end duration
 - Extraction duration
-- Row count
+- Transformation duration
+- Airtable sync duration
+- Row count (raw)
+- Row count (normalized)
 - Parse failures
-- Selector failures
-- Retry count
+- Mapping validation failures
+- Airtable write failures/retries
 - Data completeness score
 
-Select primary strategy per report using:
-1. Reliability first (consistent success)
+Selection priorities:
+1. Reliability first
 2. Data completeness
 3. Speed
 
-## Iteration Plan
+## Iteration Plan (revised roadmap)
 ### Phase 0 — Recorder/bootstrap
 - Use Playwright codegen to produce initial navigation/login script.
-- Refactor generated code into maintainable page/workflow helpers.
+- Refactor generated code into maintainable helpers.
 
 ### Phase 1 — Read-only extractor prototype
 - Implement strict read-only guard.
-- Implement at least one report extraction method.
-- Output local artifacts only (no Airtable).
+- Implement extraction methods.
+- Save local artifacts only.
 
 ### Phase 2 — Technique comparison harness
 - Add side-by-side DOM/network/download runners.
@@ -86,33 +186,37 @@ Select primary strategy per report using:
 ### Phase 3 — Stabilization
 - Selector fallback strategy.
 - Better timeout/retry settings.
-- Failure screenshots + Playwright traces.
+- Failure screenshots + traces.
 
-### Phase 4 — Destination integration
-- Add Airtable upsert pipeline only after extraction quality is proven.
+### Phase 4 — Schema mapping specification (**current planning focus**)
+- Finalize authoritative Airtable columns.
+- Finalize input→output mapping rules.
+- Finalize hierarchy/row-type parser rules.
 
-## Codegen Usage Guidance
-Use Playwright codegen to accelerate first scripts:
+### Phase 5 — Airtable integration
+- Implement normalization pipeline from downloaded files.
+- Implement idempotent Airtable upsert.
+- Add sync metrics and failure artifacts.
 
-1. Run codegen against IRI login/report flow.
-2. Capture baseline interactions.
-3. Move generated selectors into constants.
-4. Replace fragile selectors with role/label/test-id locators where possible.
-5. Wrap clicks with read-only guard helper.
+### Phase 6 — Production hardening
+- Backfill/replay support.
+- Data quality checks and drift alerts.
+- Runbook + operational ownership.
 
 ## Prototype Outputs
 Each run should produce:
 - `artifacts/raw/*.json` (raw extracted payload)
-- `artifacts/normalized/*.json` (clean schema)
+- `artifacts/normalized/*.json` (Airtable-ready records)
+- `artifacts/rejects/*.json` (rows failing mapping/validation)
 - `artifacts/screenshots/*.png` (step/failure evidence)
 - `artifacts/metrics/*.json` (durations, row counts, retries)
 
-## Definition of Done (v0)
-- Can login and reach target report flow.
-- Can run in strict read-only mode post-login.
-- Can extract and save local data artifacts.
-- Can run repeatedly with stable success.
-- No Airtable writes yet.
+## Definition of Done (next milestone)
+- Can download target report consistently.
+- Can parse hierarchical rows deterministically.
+- Can produce Airtable-ready normalized records with required columns.
+- Can upsert idempotently into Airtable with stable success.
+- Can emit run metrics and reject artifacts for debugging.
 
 ## Auth Session Strategy (MFA-friendly)
 To avoid automating email/MFA, we use a saved Playwright storage state.
@@ -132,60 +236,12 @@ To avoid automating email/MFA, we use a saved Playwright storage state.
 
 ## Troubleshooting
 ### `ENOENT` when writing artifact files
-If you see an error like missing `artifacts/metrics/...json`, it means artifact folders were not present.
-The runner now creates required folders automatically at startup.
-
-### After auth browser closes, what next?
-1. Confirm `playwright/.auth/iri.json` exists.
-2. Run `npm run run -- --mode=dom`.
-3. If run opens IRI and then exits/fails quickly, add your post-login codegen navigation steps into `src/index.ts` TODO section.
-4. Re-run and verify `artifacts/raw` and `artifacts/metrics` JSON files are created.
+If you see an error like missing artifact folders, ensure startup creates required directories.
 
 ### Run succeeds too fast with tiny duration
-If `npm run run -- --mode=dom` succeeds in a few hundred milliseconds, it likely extracted from the landing page instead of your target report.
+If extraction succeeds in a few hundred milliseconds, it likely extracted from the landing page instead of your target report.
 
-- The runner now throws if DOM/network extraction returns zero records.
-- Fix by adding your real post-login report-navigation steps from codegen in `src/index.ts` before extraction.
-
-## Recommended Workflow (avoid codegen re-login confusion)
-`npm run codegen` opens a fresh browser context, so it may still show login even after `auth:setup`.
-
-Use this sequence instead:
-1. `npm run auth:setup` and complete login/MFA once.
-2. `npm run record:auth` to open browser **with saved storageState** and Playwright Inspector enabled.
-3. In Inspector, click through the exact report workflow.
-4. Copy generated actions into the TODO block in `src/index.ts`.
-5. Run `npm run run -- --mode=dom`.
-
-This keeps recording and extraction in the same authenticated model.
-
-### If Inspector does not show up
-Some environments do not show `page.pause()` Inspector reliably.
-Use the built-in codegen recorder with saved auth state instead:
-
-- `npm run record:auth`
-
-This runs Playwright codegen with `--load-storage=playwright/.auth/iri.json` so recording starts with your saved authenticated session.
-
-## Where the generated `await page...` code appears
-With the current `record:auth` script, generated code is written to:
-
-- `generated/iri.codegen.spec.ts`
-
-So after finishing your click workflow, close recorder and open that file to copy/paste steps into `src/index.ts`.
-
-## Download behavior notes (important)
-- If automation runs on **your local PC**, downloaded files are on your PC.
-- Weird filenames (UUID-like, no `.xlsx`) usually mean server response does not set a friendly filename/extension.
-- Download mode now captures the Playwright `Download` object and writes to `artifacts/downloads/` via `download.saveAs(...)`.
-- If server-provided filename has no extension, runner infers extension from file signature (e.g., ZIP header => `.xlsx`) before saving.
-- Metrics/raw artifact now include both `suggestedFilename` (server/browser) and `savedPath` (actual file on disk).
-
-### `ENOENT` for `generated/iri.codegen.spec.ts`
-If `npm run record:auth` fails because `generated/` does not exist, the script now creates that folder automatically before launching codegen.
-
-If auth state was not saved because `auth:setup` was left before pressing Enter, re-run:
-1. `npm run auth:setup`
-2. complete login
-3. return to terminal and press Enter
-4. then run `npm run record:auth`
+### Download behavior notes
+- If automation runs on your local PC, downloaded files are on your PC.
+- Download mode captures the Playwright `Download` object and writes to `artifacts/downloads/`.
+- If filename has no extension, infer extension from file signature before saving.
