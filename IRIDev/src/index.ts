@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, type BrowserContext, type Download, type Page } from 'playwright';
 import {
   ensureArtifactDirectories,
   extractViaDomTable,
@@ -46,6 +46,89 @@ function assertNonEmptyExtraction(mode: ExtractionMode, payload: unknown): void 
   }
 }
 
+async function captureDownloadFromContext(
+  context: BrowserContext,
+  trigger: () => Promise<void>,
+  timeoutMs = 120_000
+): Promise<Download> {
+  return new Promise<Download>((resolve, reject) => {
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const listeningPages = new Set<Page>();
+
+    const onDownload = (download: Download) => {
+      finish(() => resolve(download));
+    };
+
+    const subscribeToPage = (candidate: Page) => {
+      if (listeningPages.has(candidate)) {
+        return;
+      }
+      listeningPages.add(candidate);
+      candidate.on('download', onDownload);
+    };
+
+    const unsubscribeAllPages = () => {
+      for (const candidate of listeningPages) {
+        candidate.off('download', onDownload);
+      }
+      listeningPages.clear();
+    };
+
+    const cleanup = () => {
+      unsubscribeAllPages();
+      context.off('page', onPageCreated);
+      context.off('close', onContextClose);
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+
+    const finish = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      callback();
+    };
+
+    const onPageCreated = (createdPage: Page) => {
+      subscribeToPage(createdPage);
+    };
+
+    const onContextClose = () => {
+      finish(() => reject(new Error('Browser context closed before a download event was emitted.')));
+    };
+
+    for (const existingPage of context.pages()) {
+      subscribeToPage(existingPage);
+    }
+    context.on('page', onPageCreated);
+    context.on('close', onContextClose);
+
+    timer = setTimeout(() => {
+      finish(() => reject(new Error(`Timed out after ${timeoutMs}ms waiting for a download event.`)));
+    }, timeoutMs);
+
+    trigger().catch((error) => {
+      finish(() => reject(error));
+    });
+  });
+}
+
+async function clickExportFromInbox(page: Page): Promise<void> {
+  const exportTitle = page.locator('#inbox').getByText('(BP226) US Costco Small');
+  const exportExcelIcon = exportTitle.locator('xpath=following::img[contains(@src, "xlsx") or contains(@src, "xls")][1]');
+
+  if ((await exportExcelIcon.count()) > 0) {
+    await exportExcelIcon.first().click();
+    return;
+  }
+
+  await exportTitle.first().click();
+}
+
 async function main(): Promise<void> {
   const mode = getMode();
   await assertAuthStateExists();
@@ -89,9 +172,9 @@ async function main(): Promise<void> {
         break;
       case 'download':
         {
-          const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
-          await page.locator('#inbox').getByText('(BP226) US Costco Small').click();
-          const download = await downloadPromise;
+          const download = await captureDownloadFromContext(context, async () => {
+            await clickExportFromInbox(page);
+          });
           const saved = await saveDownloadArtifact(download, '(BP226)-US-Costco-Small-Vendor-Report_PREMIUM');
           payload = {
             message: 'Report download captured and persisted to local artifacts/downloads.',
