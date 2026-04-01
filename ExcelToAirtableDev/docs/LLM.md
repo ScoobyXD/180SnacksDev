@@ -76,3 +76,7 @@ Fixture rows are test-case mini datasets (5–10 representative rows) used to lo
 - Output includes only warehouse rows.
 - Every output row has `Item`, `Region`, `Venue` populated from deterministic rules.
 - `Date` column is blank for all rows.
+
+
+## Dependency note
+- Runtime XLSX handling uses `exceljs` in order to avoid the unresolved high-severity advisory currently affecting the `xlsx` package in this workflow.
