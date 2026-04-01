@@ -42,7 +42,7 @@ Output workbook columns are exactly:
 14. `Average Promoted Price`
 
 ## Deterministic parsing rules
-- Week ending is auto-detected from top-of-sheet metadata text like `week ending 03-29-2026`, normalized to `YYYY-MM-DD`, and applied to every output row.
+- Week ending is detected only from top-of-sheet shape metadata (e.g., `Shape 1`), normalized to `MM-DD-YYYY`, and applied to every output row.
 - Treat `Item` as the key context dimension.
 - Drop totals rows (e.g., `Total US by Region`).
 - Drop non-warehouse summary rows from output.
@@ -51,7 +51,7 @@ Output workbook columns are exactly:
 - Carry `currentRegion` from last region row.
 - Set `Date` to empty string for all rows.
 
-- If week ending cannot be detected and no CLI override is provided, the run fails fast to avoid blank week fields.
+- If week ending cannot be detected from Shape 1 metadata, the run fails fast to avoid blank week fields.
 
 ## Out of scope for v0
 - No Airtable API calls yet.
@@ -68,11 +68,11 @@ Fixture rows are test-case mini datasets (5–10 representative rows) used to lo
 - negative values preserved
 
 ## CLI contract
-`npm run run -- --input=<path.xlsx> [--output=<path.xlsx>] [--weekEnding=MM-DD-YYYY]`
+`npm run run -- --input=<path.xlsx> [--output=<path.xlsx>]`
 
 - `--input` required
 - `--output` optional (auto timestamped default)
-- `--weekEnding` optional (overrides detected sheet-header week ending; accepted as `MM-DD-YYYY` or `MM/DD/YYYY`, normalized to `YYYY-MM-DD`)
+- Week ending is not accepted as CLI input; it is sourced from Shape 1 metadata only.
 
 ## Success criteria (v0)
 - Given a known input workbook, output workbook is created.

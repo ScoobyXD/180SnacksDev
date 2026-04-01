@@ -4,7 +4,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import ExcelJS from 'exceljs';
 import { getOutputColumns, transformRows } from './transform.js';
-import { detectWeekEnding, normalizeWeekEnding } from './weekEnding.js';
+import { detectWeekEndingFromShapesFile } from './weekEnding.js';
 
 function getArg(name) {
   const arg = process.argv.find((item) => item.startsWith(`--${name}=`));
@@ -79,7 +79,7 @@ async function loadInputRows(inputPath) {
   }
 
   const headerRowIndex = detectHeaderRow(rowArrays);
-  const detectedWeekEnding = detectWeekEnding(rowArrays, headerRowIndex);
+  const detectedWeekEnding = await detectWeekEndingFromShapesFile(inputPath);
   const headers = (rowArrays[headerRowIndex] || []).map((value) => String(value ?? '').trim());
   const bodyRows = rowArrays.slice(headerRowIndex + 1);
 
@@ -121,11 +121,10 @@ async function main() {
   const outputPath = getArg('output') ?? defaultOutputPath(inputPath);
 
   const { rows: inputRows, detectedWeekEnding } = await loadInputRows(inputPath);
-  const cliWeekEnding = normalizeWeekEnding(getArg('weekEnding') ?? '');
-  const weekEnding = cliWeekEnding || detectedWeekEnding;
+  const weekEnding = detectedWeekEnding;
 
   if (!weekEnding) {
-    throw new Error('Could not detect a week ending date from the input sheet. Pass --weekEnding=MM-DD-YYYY explicitly.');
+    throw new Error('Could not detect a week ending date from Shape 1 metadata in the input sheet.');
   }
 
   const normalizedRows = transformRows(inputRows, { weekEnding });
@@ -137,7 +136,7 @@ async function main() {
     inputRowCount: inputRows.length,
     outputRowCount: normalizedRows.length,
     weekEnding,
-    weekEndingSource: cliWeekEnding ? 'cli-override' : 'detected-from-sheet-header',
+    weekEndingSource: 'detected-from-sheet-shape',
     note: 'Date column intentionally left blank.'
   }, null, 2));
 }
