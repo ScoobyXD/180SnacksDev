@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import ExcelJS from 'exceljs';
 import { getOutputColumns, transformRows } from './transform.js';
+import { detectWeekEnding, normalizeWeekEnding } from './weekEnding.js';
 
 function getArg(name) {
   const arg = process.argv.find((item) => item.startsWith(`--${name}=`));
@@ -55,23 +57,6 @@ function detectHeaderRow(rowArrays) {
     }
   }
   return 0;
-}
-
-function detectWeekEnding(rowArrays, headerRowIndex) {
-  const weekEndingRegex = /week\s*ending\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i;
-  const rowsToScan = rowArrays.slice(0, Math.max(headerRowIndex, 1));
-
-  for (const row of rowsToScan) {
-    for (const cell of row || []) {
-      const value = String(cell ?? '');
-      const match = value.match(weekEndingRegex);
-      if (match) {
-        return match[1].replace(/\//g, '-');
-      }
-    }
-  }
-
-  return '';
 }
 
 async function loadInputRows(inputPath) {
@@ -136,7 +121,13 @@ async function main() {
   const outputPath = getArg('output') ?? defaultOutputPath(inputPath);
 
   const { rows: inputRows, detectedWeekEnding } = await loadInputRows(inputPath);
-  const weekEnding = getArg('weekEnding') ?? detectedWeekEnding;
+  const cliWeekEnding = normalizeWeekEnding(getArg('weekEnding') ?? '');
+  const weekEnding = cliWeekEnding || detectedWeekEnding;
+
+  if (!weekEnding) {
+    throw new Error('Could not detect a week ending date from the input sheet. Pass --weekEnding=MM-DD-YYYY explicitly.');
+  }
+
   const normalizedRows = transformRows(inputRows, { weekEnding });
   await saveOutputWorkbook(normalizedRows, outputPath);
 
@@ -146,12 +137,14 @@ async function main() {
     inputRowCount: inputRows.length,
     outputRowCount: normalizedRows.length,
     weekEnding,
-    weekEndingSource: getArg('weekEnding') ? 'cli-override' : (detectedWeekEnding ? 'detected-from-sheet-header' : 'empty'),
+    weekEndingSource: cliWeekEnding ? 'cli-override' : 'detected-from-sheet-header',
     note: 'Date column intentionally left blank.'
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

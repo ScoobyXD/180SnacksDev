@@ -42,7 +42,7 @@ Output workbook columns are exactly:
 14. `Average Promoted Price`
 
 ## Deterministic parsing rules
-- Week ending is auto-detected from top-of-sheet metadata text like `week ending 03-29-2026` and applied to every output row.
+- Week ending is auto-detected from top-of-sheet metadata text like `week ending 03-29-2026`, normalized to `YYYY-MM-DD`, and applied to every output row.
 - Treat `Item` as the key context dimension.
 - Drop totals rows (e.g., `Total US by Region`).
 - Drop non-warehouse summary rows from output.
@@ -50,6 +50,8 @@ Output workbook columns are exactly:
 - Carry `currentItem` from last non-empty `Item`.
 - Carry `currentRegion` from last region row.
 - Set `Date` to empty string for all rows.
+
+- If week ending cannot be detected and no CLI override is provided, the run fails fast to avoid blank week fields.
 
 ## Out of scope for v0
 - No Airtable API calls yet.
@@ -70,7 +72,7 @@ Fixture rows are test-case mini datasets (5–10 representative rows) used to lo
 
 - `--input` required
 - `--output` optional (auto timestamped default)
-- `--weekEnding` optional (overrides detected sheet-header week ending)
+- `--weekEnding` optional (overrides detected sheet-header week ending; accepted as `MM-DD-YYYY` or `MM/DD/YYYY`, normalized to `YYYY-MM-DD`)
 
 ## Success criteria (v0)
 - Given a known input workbook, output workbook is created.
