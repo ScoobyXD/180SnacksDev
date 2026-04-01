@@ -188,3 +188,10 @@ If auth state was not saved because `auth:setup` was left before pressing Enter,
 2. complete login
 3. return to terminal and press Enter
 4. then run `npm run record:auth`
+
+## Download Mode Persistence (implemented)
+`--mode=download` now explicitly persists files in two places:
+1. Project artifact store: `artifacts/raw/<filename>`
+2. Local machine Downloads folder: `<home>/Downloads/<filename>`
+
+This avoids temporary Playwright download files disappearing when browser context closes.

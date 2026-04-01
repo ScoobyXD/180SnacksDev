@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import { type Download, type Page, chromium } from 'playwright';
 import { ensureArtifactDirectories, extractViaDomTable, extractViaNetworkCapture, saveArtifact, type ExtractionMode } from './extractors.js';
 import { installReadOnlyNetworkGuard } from './readOnlyGuard.js';
 
@@ -26,7 +27,6 @@ async function assertAuthStateExists(): Promise<void> {
   }
 }
 
-
 function assertNonEmptyExtraction(mode: ExtractionMode, payload: unknown): void {
   if (mode === 'download') {
     return;
@@ -39,6 +39,46 @@ function assertNonEmptyExtraction(mode: ExtractionMode, payload: unknown): void 
   }
 }
 
+function buildFileName(download: Download): string {
+  const suggested = download.suggestedFilename();
+  if (suggested && suggested.trim().length > 0) {
+    return suggested;
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `iri-export-${stamp}.bin`;
+}
+
+async function runDownloadWorkflow(page: Page): Promise<Record<string, unknown>> {
+  await page.locator('.fa.fa-grid-round').click();
+  await page.getByText('Library').click();
+  await page.getByText('(BP226) US Costco Small Vendor Report_PREMIUM', { exact: true }).click();
+  await page.locator('a').filter({ hasText: /^More$/ }).click();
+  await page.locator('#SBMore-listUI').getByText('Export').click();
+  await page.getByText(/week ending/i).first().click();
+  await page.locator('#btnexport').click();
+  await page.locator('#export-form').getByText('OK').click();
+  await page.locator('#user div').filter({ hasText: /^1$/ }).click();
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 60_000 });
+  await page.locator('#inbox').first().click();
+  const download = await downloadPromise;
+
+  const fileName = buildFileName(download);
+  const artifactPath = path.join('artifacts', 'raw', fileName);
+  const localDownloadsPath = path.join(os.homedir(), 'Downloads', fileName);
+
+  await download.saveAs(artifactPath);
+  await download.saveAs(localDownloadsPath);
+
+  return {
+    mode: 'download',
+    fileName,
+    artifactPath,
+    localDownloadsPath
+  };
+}
+
 async function main(): Promise<void> {
   const mode = getMode();
   await assertAuthStateExists();
@@ -47,31 +87,22 @@ async function main(): Promise<void> {
   const browser = await chromium.launch({ headless: false, slowMo: 50 });
   const context = await browser.newContext({
     storageState: authStatePath,
-    recordVideo: { dir: 'artifacts/screenshots' }
+    recordVideo: { dir: 'artifacts/screenshots' },
+    acceptDownloads: true
   });
   const page = await context.newPage();
 
   const runStart = Date.now();
   try {
     await page.goto(iriUrl, { waitUntil: 'domcontentloaded' });
-    await page.goto('https://advantage.iriworldwide.com/unify-CRX/plus/landing/0');
-    await page.locator('.fa.fa-grid-round').click();
-    await page.getByText('Library').click();
-    await page.getByText('(BP226) US Costco Small Vendor Report_PREMIUM', { exact: true }).click();
-    await page.locator('a').filter({ hasText: /^More$/ }).click();
-    await page.locator('#SBMore-listUI').getByText('Export').click();
-    await page.getByText('week ending 03-29-2026').click();
-    await page.locator('#btnexport').click();
-    await page.locator('#export-form').getByText('OK').click();
-    await page.locator('#user div').filter({ hasText: /^1$/ }).click();
-    const downloadPromise = page.waitForEvent('download');
-    await page.locator('#inbox').getByText('(BP226) US Costco Small').click();
-    const download = await downloadPromise;
 
-    // In strict mode, only GET/HEAD/OPTIONS requests are allowed unless allowlisted.
     installReadOnlyNetworkGuard(page, [
       /auth/i,
-      /session/i
+      /session/i,
+      /export/i,
+      /download/i,
+      /inbox/i,
+      /attachment/i
     ]);
 
     let payload: unknown;
@@ -83,9 +114,7 @@ async function main(): Promise<void> {
         payload = await extractViaNetworkCapture(page);
         break;
       case 'download':
-        payload = {
-          message: 'Download mode not implemented yet. Add report export click + download parsing.'
-        };
+        payload = await runDownloadWorkflow(page);
         break;
     }
 
