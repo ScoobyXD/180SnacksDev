@@ -140,3 +140,9 @@ The runner now creates required folders automatically at startup.
 2. Run `npm run run -- --mode=dom`.
 3. If run opens IRI and then exits/fails quickly, add your post-login codegen navigation steps into `src/index.ts` TODO section.
 4. Re-run and verify `artifacts/raw` and `artifacts/metrics` JSON files are created.
+
+### Run succeeds too fast with tiny duration
+If `npm run run -- --mode=dom` succeeds in a few hundred milliseconds, it likely extracted from the landing page instead of your target report.
+
+- The runner now throws if DOM/network extraction returns zero records.
+- Fix by adding your real post-login report-navigation steps from codegen in `src/index.ts` before extraction.

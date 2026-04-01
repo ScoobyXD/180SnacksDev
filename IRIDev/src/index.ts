@@ -26,6 +26,19 @@ async function assertAuthStateExists(): Promise<void> {
   }
 }
 
+
+function assertNonEmptyExtraction(mode: ExtractionMode, payload: unknown): void {
+  if (mode === 'download') {
+    return;
+  }
+
+  if (Array.isArray(payload) && payload.length === 0) {
+    throw new Error(
+      `Extraction returned 0 records in mode=${mode}. This usually means report-navigation steps from codegen have not been added yet.`
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const mode = getMode();
   await assertAuthStateExists();
@@ -68,6 +81,8 @@ async function main(): Promise<void> {
         };
         break;
     }
+
+    assertNonEmptyExtraction(mode, payload);
 
     const rawPath = await saveArtifact('raw', `${mode}-extract`, payload);
     const metrics = {
