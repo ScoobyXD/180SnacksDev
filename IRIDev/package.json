@@ -8,7 +8,7 @@
     "codegen": "playwright codegen https://advantage.iriworldwide.com/unify-CRX/plus/landing/0",
     "run": "node --loader ts-node/esm src/index.ts",
     "typecheck": "tsc --noEmit",
-    "record:auth": "playwright codegen --load-storage=playwright/.auth/iri.json https://advantage.iriworldwide.com/unify-CRX/plus/landing/0"
+    "record:auth": "playwright codegen --target=playwright-test --output=generated/iri.codegen.spec.ts --load-storage=playwright/.auth/iri.json https://advantage.iriworldwide.com/unify-CRX/plus/landing/0"
   },
   "dependencies": {
     "playwright": "^1.54.2"

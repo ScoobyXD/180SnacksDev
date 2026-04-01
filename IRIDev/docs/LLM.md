@@ -166,3 +166,16 @@ Use the built-in codegen recorder with saved auth state instead:
 - `npm run record:auth`
 
 This runs Playwright codegen with `--load-storage=playwright/.auth/iri.json` so recording starts with your saved authenticated session.
+
+## Where the generated `await page...` code appears
+With the current `record:auth` script, generated code is written to:
+
+- `generated/iri.codegen.spec.ts`
+
+So after finishing your click workflow, close recorder and open that file to copy/paste steps into `src/index.ts`.
+
+## Download behavior notes (important)
+- If automation runs on **your local PC**, downloaded files are on your PC.
+- Weird filenames (UUID-like, no `.xlsx`) usually mean server response does not set a friendly filename/extension.
+- In download mode implementation, we should capture Playwright `Download` objects and force a filename like `report-YYYY-MM-DD.xlsx` via `download.saveAs(...)`.
+- We should also inspect `Content-Type` and first bytes to verify true format (`xlsx`, `csv`, `zip`, `json`, etc.).
