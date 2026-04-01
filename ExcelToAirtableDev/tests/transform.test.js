@@ -34,7 +34,7 @@ test('ignores rows until first warehouse and handles numeric strings', () => {
   const out = transformRows(input, { weekEnding: '' });
 
   assert.equal(out.length, 1);
-  assert.equal(out[0]['Week Ending'], '');
+  assert.equal(out[0]['Week Ending Date'], '');
   assert.equal(out[0]['Unit Sales'], 4416);
   assert.equal(out[0]['Average Price per Unit'], 11.47);
 });

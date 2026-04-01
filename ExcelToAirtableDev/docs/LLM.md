@@ -29,7 +29,7 @@ Output workbook columns are exactly:
 1. `Item`
 2. `Region`
 3. `Venue`
-4. `Week Ending`
+4. `Week Ending Date`
 5. `Date` (must stay blank in current weekly-only workflow)
 6. `Dollar Sales`
 7. `Unit Sales`
@@ -42,6 +42,7 @@ Output workbook columns are exactly:
 14. `Average Promoted Price`
 
 ## Deterministic parsing rules
+- Week ending is auto-detected from top-of-sheet metadata text like `week ending 03-29-2026` and applied to every output row.
 - Treat `Item` as the key context dimension.
 - Drop totals rows (e.g., `Total US by Region`).
 - Drop non-warehouse summary rows from output.
@@ -65,11 +66,11 @@ Fixture rows are test-case mini datasets (5–10 representative rows) used to lo
 - negative values preserved
 
 ## CLI contract
-`npm run run -- --input=<path.xlsx> [--output=<path.xlsx>] [--weekEnding=YYYY-MM-DD]`
+`npm run run -- --input=<path.xlsx> [--output=<path.xlsx>] [--weekEnding=MM-DD-YYYY]`
 
 - `--input` required
 - `--output` optional (auto timestamped default)
-- `--weekEnding` optional (empty by default)
+- `--weekEnding` optional (overrides detected sheet-header week ending)
 
 ## Success criteria (v0)
 - Given a known input workbook, output workbook is created.

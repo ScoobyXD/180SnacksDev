@@ -57,6 +57,23 @@ function detectHeaderRow(rowArrays) {
   return 0;
 }
 
+function detectWeekEnding(rowArrays, headerRowIndex) {
+  const weekEndingRegex = /week\s*ending\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i;
+  const rowsToScan = rowArrays.slice(0, Math.max(headerRowIndex, 1));
+
+  for (const row of rowsToScan) {
+    for (const cell of row || []) {
+      const value = String(cell ?? '');
+      const match = value.match(weekEndingRegex);
+      if (match) {
+        return match[1].replace(/\//g, '-');
+      }
+    }
+  }
+
+  return '';
+}
+
 async function loadInputRows(inputPath) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(inputPath);
@@ -77,10 +94,11 @@ async function loadInputRows(inputPath) {
   }
 
   const headerRowIndex = detectHeaderRow(rowArrays);
+  const detectedWeekEnding = detectWeekEnding(rowArrays, headerRowIndex);
   const headers = (rowArrays[headerRowIndex] || []).map((value) => String(value ?? '').trim());
   const bodyRows = rowArrays.slice(headerRowIndex + 1);
 
-  return bodyRows.map((row) => {
+  const rows = bodyRows.map((row) => {
     const record = {};
     for (let i = 0; i < headers.length; i += 1) {
       const key = headers[i] || `Column_${i + 1}`;
@@ -88,6 +106,8 @@ async function loadInputRows(inputPath) {
     }
     return record;
   });
+
+  return { rows, detectedWeekEnding };
 }
 
 function defaultOutputPath(inputPath) {
@@ -114,9 +134,9 @@ async function saveOutputWorkbook(records, outputPath) {
 async function main() {
   const inputPath = requireInputPath();
   const outputPath = getArg('output') ?? defaultOutputPath(inputPath);
-  const weekEnding = getArg('weekEnding') ?? '';
 
-  const inputRows = await loadInputRows(inputPath);
+  const { rows: inputRows, detectedWeekEnding } = await loadInputRows(inputPath);
+  const weekEnding = getArg('weekEnding') ?? detectedWeekEnding;
   const normalizedRows = transformRows(inputRows, { weekEnding });
   await saveOutputWorkbook(normalizedRows, outputPath);
 
@@ -126,6 +146,7 @@ async function main() {
     inputRowCount: inputRows.length,
     outputRowCount: normalizedRows.length,
     weekEnding,
+    weekEndingSource: getArg('weekEnding') ? 'cli-override' : (detectedWeekEnding ? 'detected-from-sheet-header' : 'empty'),
     note: 'Date column intentionally left blank.'
   }, null, 2));
 }
