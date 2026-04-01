@@ -1,7 +1,14 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { ensureArtifactDirectories, extractViaDomTable, extractViaNetworkCapture, saveArtifact, type ExtractionMode } from './extractors.js';
+import {
+  ensureArtifactDirectories,
+  extractViaDomTable,
+  extractViaNetworkCapture,
+  saveArtifact,
+  saveDownloadArtifact,
+  type ExtractionMode
+} from './extractors.js';
 import { installReadOnlyNetworkGuard } from './readOnlyGuard.js';
 
 const iriUrl = 'https://advantage.iriworldwide.com/unify-CRX/plus/landing/0';
@@ -47,6 +54,7 @@ async function main(): Promise<void> {
   const browser = await chromium.launch({ headless: false, slowMo: 50 });
   const context = await browser.newContext({
     storageState: authStatePath,
+    acceptDownloads: true,
     recordVideo: { dir: 'artifacts/screenshots' }
   });
   const page = await context.newPage();
@@ -64,9 +72,6 @@ async function main(): Promise<void> {
     await page.locator('#btnexport').click();
     await page.locator('#export-form').getByText('OK').click();
     await page.locator('#user div').filter({ hasText: /^1$/ }).click();
-    const downloadPromise = page.waitForEvent('download');
-    await page.locator('#inbox').getByText('(BP226) US Costco Small').click();
-    const download = await downloadPromise;
 
     // In strict mode, only GET/HEAD/OPTIONS requests are allowed unless allowlisted.
     installReadOnlyNetworkGuard(page, [
@@ -83,9 +88,17 @@ async function main(): Promise<void> {
         payload = await extractViaNetworkCapture(page);
         break;
       case 'download':
-        payload = {
-          message: 'Download mode not implemented yet. Add report export click + download parsing.'
-        };
+        {
+          const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
+          await page.locator('#inbox').getByText('(BP226) US Costco Small').click();
+          const download = await downloadPromise;
+          const saved = await saveDownloadArtifact(download, '(BP226)-US-Costco-Small-Vendor-Report_PREMIUM');
+          payload = {
+            message: 'Report download captured and persisted to local artifacts/downloads.',
+            suggestedFilename: download.suggestedFilename(),
+            ...saved
+          };
+        }
         break;
     }
 
