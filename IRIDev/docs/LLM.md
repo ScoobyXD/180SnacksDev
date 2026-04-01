@@ -158,3 +158,11 @@ Use this sequence instead:
 5. Run `npm run run -- --mode=dom`.
 
 This keeps recording and extraction in the same authenticated model.
+
+### If Inspector does not show up
+Some environments do not show `page.pause()` Inspector reliably.
+Use the built-in codegen recorder with saved auth state instead:
+
+- `npm run record:auth`
+
+This runs Playwright codegen with `--load-storage=playwright/.auth/iri.json` so recording starts with your saved authenticated session.
