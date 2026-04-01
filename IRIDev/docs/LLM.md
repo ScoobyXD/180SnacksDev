@@ -179,3 +179,12 @@ So after finishing your click workflow, close recorder and open that file to cop
 - Weird filenames (UUID-like, no `.xlsx`) usually mean server response does not set a friendly filename/extension.
 - In download mode implementation, we should capture Playwright `Download` objects and force a filename like `report-YYYY-MM-DD.xlsx` via `download.saveAs(...)`.
 - We should also inspect `Content-Type` and first bytes to verify true format (`xlsx`, `csv`, `zip`, `json`, etc.).
+
+### `ENOENT` for `generated/iri.codegen.spec.ts`
+If `npm run record:auth` fails because `generated/` does not exist, the script now creates that folder automatically before launching codegen.
+
+If auth state was not saved because `auth:setup` was left before pressing Enter, re-run:
+1. `npm run auth:setup`
+2. complete login
+3. return to terminal and press Enter
+4. then run `npm run record:auth`
