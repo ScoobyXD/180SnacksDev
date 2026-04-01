@@ -1,8 +1,11 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { chromium } from 'playwright';
 import { extractViaDomTable, extractViaNetworkCapture, saveArtifact, type ExtractionMode } from './extractors.js';
 import { installReadOnlyNetworkGuard } from './readOnlyGuard.js';
 
 const iriUrl = 'https://advantage.iriworldwide.com/unify-CRX/plus/landing/0';
+const authStatePath = path.join('playwright', '.auth', 'iri.json');
 
 function getMode(): ExtractionMode {
   const modeArg = process.argv.find((arg) => arg.startsWith('--mode='));
@@ -13,21 +16,36 @@ function getMode(): ExtractionMode {
   return mode;
 }
 
+async function assertAuthStateExists(): Promise<void> {
+  try {
+    await fs.access(authStatePath);
+  } catch {
+    throw new Error(
+      `Missing auth storage state at ${authStatePath}. Run "npm run auth:setup" first, login in the browser, and press Enter to save.`
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const mode = getMode();
+  await assertAuthStateExists();
+
   const browser = await chromium.launch({ headless: false, slowMo: 50 });
-  const context = await browser.newContext({ recordVideo: { dir: 'artifacts/screenshots' } });
+  const context = await browser.newContext({
+    storageState: authStatePath,
+    recordVideo: { dir: 'artifacts/screenshots' }
+  });
   const page = await context.newPage();
 
   const runStart = Date.now();
   try {
     await page.goto(iriUrl, { waitUntil: 'domcontentloaded' });
 
-    // TODO: Replace this block with your generated codegen login + navigation flow.
+    // TODO: Replace this block with your generated codegen post-login navigation flow.
     // Suggested process:
-    // 1) run: npm run codegen
-    // 2) copy the generated steps into a helper and replace fragile selectors
-    // 3) after login completes, enable strict read-only network guard
+    // 1) run: npm run codegen (while already logged in)
+    // 2) copy the generated report-navigation steps into a helper and replace fragile selectors
+    // 3) keep strict read-only guard enabled during extraction
 
     // In strict mode, only GET/HEAD/OPTIONS requests are allowed unless allowlisted.
     installReadOnlyNetworkGuard(page, [

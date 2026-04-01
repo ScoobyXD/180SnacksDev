@@ -113,3 +113,19 @@ Each run should produce:
 - Can extract and save local data artifacts.
 - Can run repeatedly with stable success.
 - No Airtable writes yet.
+
+## Auth Session Strategy (MFA-friendly)
+To avoid automating email/MFA, we use a saved Playwright storage state.
+
+### One-time setup
+1. Run `npm run auth:setup`
+2. Log in manually in the opened browser (including MFA/email confirmation)
+3. Once fully logged in, return to terminal and press **Enter**
+4. Script saves auth state to `playwright/.auth/iri.json`
+
+### Normal runs
+- `npm run run -- --mode=dom` (or `network` / `download`)
+- Runner loads `playwright/.auth/iri.json` and starts from authenticated browser state.
+
+### Security note
+- `playwright/.auth/` is gitignored and should never be committed.
