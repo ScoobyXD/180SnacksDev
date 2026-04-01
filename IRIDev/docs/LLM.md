@@ -129,3 +129,14 @@ To avoid automating email/MFA, we use a saved Playwright storage state.
 
 ### Security note
 - `playwright/.auth/` is gitignored and should never be committed.
+
+## Troubleshooting
+### `ENOENT` when writing artifact files
+If you see an error like missing `artifacts/metrics/...json`, it means artifact folders were not present.
+The runner now creates required folders automatically at startup.
+
+### After auth browser closes, what next?
+1. Confirm `playwright/.auth/iri.json` exists.
+2. Run `npm run run -- --mode=dom`.
+3. If run opens IRI and then exits/fails quickly, add your post-login codegen navigation steps into `src/index.ts` TODO section.
+4. Re-run and verify `artifacts/raw` and `artifacts/metrics` JSON files are created.

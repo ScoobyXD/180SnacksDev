@@ -4,6 +4,15 @@ import { type Page } from 'playwright';
 
 export type ExtractionMode = 'dom' | 'network' | 'download';
 
+export async function ensureArtifactDirectories(): Promise<void> {
+  await Promise.all([
+    fs.mkdir(path.join('artifacts', 'raw'), { recursive: true }),
+    fs.mkdir(path.join('artifacts', 'normalized'), { recursive: true }),
+    fs.mkdir(path.join('artifacts', 'metrics'), { recursive: true }),
+    fs.mkdir(path.join('artifacts', 'screenshots'), { recursive: true })
+  ]);
+}
+
 export async function extractViaDomTable(page: Page): Promise<Record<string, unknown>[]> {
   return page.evaluate(() => {
     const rows = Array.from(document.querySelectorAll('table tr'));
@@ -57,7 +66,10 @@ export async function extractViaNetworkCapture(page: Page, timeoutMs = 20_000): 
 
 export async function saveArtifact(type: 'raw' | 'normalized' | 'metrics', name: string, data: unknown): Promise<string> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filePath = path.join('artifacts', type, `${stamp}-${name}.json`);
+  const directory = path.join('artifacts', type);
+  await fs.mkdir(directory, { recursive: true });
+
+  const filePath = path.join(directory, `${stamp}-${name}.json`);
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
   return filePath;
 }

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { extractViaDomTable, extractViaNetworkCapture, saveArtifact, type ExtractionMode } from './extractors.js';
+import { ensureArtifactDirectories, extractViaDomTable, extractViaNetworkCapture, saveArtifact, type ExtractionMode } from './extractors.js';
 import { installReadOnlyNetworkGuard } from './readOnlyGuard.js';
 
 const iriUrl = 'https://advantage.iriworldwide.com/unify-CRX/plus/landing/0';
@@ -29,6 +29,7 @@ async function assertAuthStateExists(): Promise<void> {
 async function main(): Promise<void> {
   const mode = getMode();
   await assertAuthStateExists();
+  await ensureArtifactDirectories();
 
   const browser = await chromium.launch({ headless: false, slowMo: 50 });
   const context = await browser.newContext({
