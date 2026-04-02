@@ -4,11 +4,13 @@ const stepsList = document.getElementById('steps');
 const logsEl = document.getElementById('logs');
 const clockEl = document.getElementById('clock');
 const branchTree = document.getElementById('branchTree');
+const pipelineGroup = document.getElementById('pipelineGroup');
 const canvas = document.getElementById('canvas');
 const world = document.getElementById('world');
 
 let currentRunId = null;
 let pollTimer = null;
+let widgetDragPointerId = null;
 
 const pan = {
   x: -4900,
@@ -19,6 +21,14 @@ const pan = {
   startMouseY: 0,
   startX: 0,
   startY: 0
+};
+
+const groupDrag = {
+  dragging: false,
+  startMouseX: 0,
+  startMouseY: 0,
+  startLeft: 0,
+  startTop: 0
 };
 
 function applyPan() {
@@ -135,7 +145,18 @@ async function startRun() {
 
 canvas.addEventListener('pointerdown', (event) => {
   const target = event.target;
-  if (target instanceof HTMLElement && target.closest('.widget')) {
+  if (target instanceof HTMLElement && target.closest('#pipelineGroup .widget')) {
+    if (target.closest('button, input, textarea, select, a, pre')) {
+      return;
+    }
+
+    groupDrag.dragging = true;
+    groupDrag.startMouseX = event.clientX;
+    groupDrag.startMouseY = event.clientY;
+    groupDrag.startLeft = Number.parseFloat(pipelineGroup.style.left || '0');
+    groupDrag.startTop = Number.parseFloat(pipelineGroup.style.top || '0');
+    widgetDragPointerId = event.pointerId;
+    canvas.setPointerCapture(event.pointerId);
     return;
   }
 
@@ -149,6 +170,14 @@ canvas.addEventListener('pointerdown', (event) => {
 });
 
 canvas.addEventListener('pointermove', (event) => {
+  if (groupDrag.dragging) {
+    const dx = (event.clientX - groupDrag.startMouseX) / pan.scale;
+    const dy = (event.clientY - groupDrag.startMouseY) / pan.scale;
+    pipelineGroup.style.left = `${groupDrag.startLeft + dx}px`;
+    pipelineGroup.style.top = `${groupDrag.startTop + dy}px`;
+    return;
+  }
+
   if (!pan.dragging) {
     return;
   }
@@ -159,6 +188,13 @@ canvas.addEventListener('pointermove', (event) => {
 });
 
 function stopPan(event) {
+  if (groupDrag.dragging && widgetDragPointerId === event.pointerId) {
+    groupDrag.dragging = false;
+    widgetDragPointerId = null;
+    canvas.releasePointerCapture(event.pointerId);
+    return;
+  }
+
   if (!pan.dragging) {
     return;
   }
