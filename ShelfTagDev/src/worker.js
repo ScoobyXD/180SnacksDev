@@ -17,6 +17,8 @@
  *   env.AIRTABLE_TABLE_ID — Airtable table ID
  */
 
+const WORKER_VERSION = '2026-04-02-r1';
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -65,6 +67,7 @@ function handleHealth(env) {
         gemini_configured: !!env.GEMINI_API_KEY,
         airtable_configured: !!env.AIRTABLE_PAT,
         r2_configured: !!env.IMAGES,
+        worker_version: WORKER_VERSION,
     });
 }
 
@@ -88,7 +91,7 @@ async function handleSync(request, env) {
         );
     }
 
-    console.log(`[Sync] Processing ${imageList.length} image(s) from ${metadata.user_name} at ${metadata.retailer}`);
+    console.log(`[Sync ${WORKER_VERSION}] Processing ${imageList.length} image(s) from ${metadata.user_name} at ${metadata.retailer}`);
 
     // ---- Step 1: Store images in R2 (with metadata for debugging) ----
     const filenames = [];
