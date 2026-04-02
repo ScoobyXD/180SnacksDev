@@ -3,20 +3,53 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import ExcelJS from 'exceljs';
+import { appendRowsToAirtable, ensureAirtableBaseAndTable, getAirtableConfig } from './airtable.js';
 import { getOutputColumns, transformRows } from './transform.js';
 import { detectWeekEndingFromShapesFile } from './weekEnding.js';
+
+
+function loadEnvFiles() {
+  const envFiles = ['.env', '.env.local'];
+  for (const filename of envFiles) {
+    const fullPath = path.resolve(process.cwd(), filename);
+    if (fs.existsSync(fullPath)) {
+      process.loadEnvFile(fullPath);
+    }
+  }
+}
 
 function getArg(name) {
   const arg = process.argv.find((item) => item.startsWith(`--${name}=`));
   return arg ? arg.split('=').slice(1).join('=') : undefined;
 }
 
-function requireInputPath() {
-  const inputPath = getArg('input');
-  if (!inputPath) {
-    throw new Error('Missing --input=<path-to-input.xlsx>');
+function findLatestIRIDownload() {
+  const downloadsDir = path.resolve(process.cwd(), '..', 'IRIDev', 'artifacts', 'downloads');
+  if (!fs.existsSync(downloadsDir)) {
+    throw new Error(`No --input provided and downloads directory does not exist: ${downloadsDir}`);
   }
-  return inputPath;
+
+  const candidates = fs.readdirSync(downloadsDir)
+    .filter((name) => /\.xlsx$/i.test(name))
+    .map((name) => {
+      const fullPath = path.join(downloadsDir, name);
+      const stats = fs.statSync(fullPath);
+      return {
+        fullPath,
+        mtimeMs: stats.mtimeMs
+      };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  if (!candidates.length) {
+    throw new Error(`No .xlsx files found in ${downloadsDir}. Run IRIDev download mode first.`);
+  }
+
+  return candidates[0].fullPath;
+}
+
+function resolveInputPath() {
+  return getArg('input') ?? findLatestIRIDownload();
 }
 
 function toPrimitiveCellValue(value) {
@@ -117,7 +150,8 @@ async function saveOutputWorkbook(records, outputPath) {
 }
 
 async function main() {
-  const inputPath = requireInputPath();
+  loadEnvFiles();
+  const inputPath = resolveInputPath();
   const outputPath = getArg('output') ?? defaultOutputPath(inputPath);
 
   const { rows: inputRows, detectedWeekEnding } = await loadInputRows(inputPath);
@@ -130,6 +164,25 @@ async function main() {
   const normalizedRows = transformRows(inputRows, { weekEnding });
   await saveOutputWorkbook(normalizedRows, outputPath);
 
+  const airtableConfig = getAirtableConfig();
+  let airtable = { enabled: false };
+
+  if (airtableConfig.enabled) {
+    const outputColumns = getOutputColumns();
+    const ensured = await ensureAirtableBaseAndTable(airtableConfig, outputColumns);
+    const appendResult = await appendRowsToAirtable(
+      { ...airtableConfig, baseId: ensured.baseId },
+      normalizedRows
+    );
+    airtable = {
+      enabled: true,
+      baseId: ensured.baseId,
+      tableName: airtableConfig.tableName,
+      ...ensured,
+      ...appendResult
+    };
+  }
+
   console.log(JSON.stringify({
     inputPath,
     outputPath,
@@ -137,7 +190,8 @@ async function main() {
     outputRowCount: normalizedRows.length,
     weekEnding,
     weekEndingSource: 'detected-from-sheet-shape',
-    note: 'Date column intentionally left blank.'
+    note: 'Date column intentionally left blank.',
+    airtable
   }, null, 2));
 }
 
