@@ -61,6 +61,7 @@ body {
   width: 12000px;
   height: 12000px;
   transform: translate(-4900px, -4400px);
+  transform-origin: 0 0;
   background: var(--bg);
 }
 
@@ -84,6 +85,12 @@ body {
   backdrop-filter: blur(1.5px);
 }
 
+.pipeline-group {
+  position: absolute;
+  width: 920px;
+  height: 540px;
+}
+
 .widget-head {
   border-bottom: 1px solid rgba(16, 19, 24, 0.14);
   padding: 8px 10px;
@@ -95,6 +102,7 @@ body {
 .core-widget {
   width: 420px;
   padding: 0 14px 14px;
+  z-index: 3;
 }
 
 .core-widget h1 {
@@ -124,19 +132,23 @@ body {
 
 .branch-tree {
   position: absolute;
-  width: 780px;
-  height: 430px;
+  width: 920px;
+  height: 540px;
+  z-index: 1;
 }
 
 .branch-lines {
   position: absolute;
   inset: 0;
+  z-index: 0;
 }
 
 .branch-lines path {
   fill: none;
   stroke: #12161e;
-  stroke-width: 2;
+  stroke-width: 2.5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
 }
 
 .branch-lines .node {
@@ -145,6 +157,7 @@ body {
 }
 
 .child-widget { width: 320px; }
+.child-widget { z-index: 2; }
 
 .services-widget { min-height: 140px; }
 

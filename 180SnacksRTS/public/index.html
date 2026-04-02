@@ -17,31 +17,32 @@
       <div class="world" id="world">
         <div class="grid-overlay" aria-hidden="true"></div>
 
-        <section class="widget core-widget" style="left: 5200px; top: 4700px;">
-          <div class="widget-head">Pipeline Control</div>
-          <h1>Costco → Airtable</h1>
-          <button id="runButton" class="run-btn">Run</button>
-          <p id="statusText" class="status-line">No run started.</p>
-        </section>
-
-        <section id="branchTree" class="branch-tree hidden" style="left: 5600px; top: 4900px;">
-          <svg class="branch-lines" viewBox="0 0 780 430" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M40 20 L40 220" />
-            <path d="M40 220 L180 140" />
-            <path d="M40 220 L180 310" />
-            <rect x="34" y="214" width="12" height="12" class="node" />
-            <rect x="174" y="134" width="12" height="12" class="node" />
-            <rect x="174" y="304" width="12" height="12" class="node" />
-          </svg>
-
-          <section id="servicesWidget" class="widget child-widget services-widget" style="left: 200px; top: 76px;">
-            <div class="widget-head">Services</div>
-            <ol id="steps" class="steps"></ol>
+        <section id="pipelineGroup" class="pipeline-group" style="left: 5200px; top: 4700px;">
+          <section class="widget core-widget" style="left: 0; top: 0;">
+            <div class="widget-head">Pipeline Control</div>
+            <h1>Costco → Airtable</h1>
+            <button id="runButton" class="run-btn">Run</button>
+            <p id="statusText" class="status-line">No run started.</p>
           </section>
 
-          <section id="logsWidget" class="widget child-widget logs-widget" style="left: 200px; top: 246px;">
-            <div class="widget-head">Execution Logs</div>
-            <pre id="logs" class="logs">Waiting for pipeline run...</pre>
+          <section id="branchTree" class="branch-tree hidden" style="left: 0; top: 0;">
+            <svg class="branch-lines" viewBox="0 0 920 540" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M92 54 L92 486" />
+              <path d="M92 236 L166 294 L306 294" />
+              <path d="M92 384 L166 432 L306 432" />
+              <rect x="300" y="288" width="12" height="12" class="node" />
+              <rect x="300" y="426" width="12" height="12" class="node" />
+            </svg>
+
+            <section id="servicesWidget" class="widget child-widget services-widget" style="left: 300px; top: 210px;">
+              <div class="widget-head">Services</div>
+              <ol id="steps" class="steps"></ol>
+            </section>
+
+            <section id="logsWidget" class="widget child-widget logs-widget" style="left: 300px; top: 344px;">
+              <div class="widget-head">Execution Logs</div>
+              <pre id="logs" class="logs">Waiting for pipeline run...</pre>
+            </section>
           </section>
         </section>
       </div>
