@@ -38,3 +38,31 @@ test('ignores rows until first warehouse and handles numeric strings', () => {
   assert.equal(out[0]['Unit Sales'], 4416);
   assert.equal(out[0]['Average Price per Unit'], 11.47);
 });
+
+test('normalizes formatted metric values and placeholder coupon values', () => {
+  const input = [
+    { Item: 'ITEM D', Venue: '  West' },
+    {
+      Item: null,
+      Venue: 'WAREHOUSE 999 SAMPLE',
+      'Average Coupon Value': '$2.40',
+      'Average Promoted Price': '(9.59)',
+      'Average Inventory per Day': 'N/A'
+    },
+    {
+      Item: null,
+      Venue: 'WAREHOUSE 998 SAMPLE',
+      'Average Coupon Value': '-',
+      'Average Promoted Price': '9.59%'
+    }
+  ];
+
+  const out = transformRows(input, { weekEnding: '03-29-2026' });
+
+  assert.equal(out.length, 2);
+  assert.equal(out[0]['Average Coupon Value'], 2.4);
+  assert.equal(out[0]['Average Promoted Price'], -9.59);
+  assert.equal(out[0]['Average Inventory per Day'], null);
+  assert.equal(out[1]['Average Coupon Value'], null);
+  assert.equal(out[1]['Average Promoted Price'], 9.59);
+});

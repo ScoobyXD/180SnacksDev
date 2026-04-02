@@ -66,8 +66,8 @@ function createRun() {
     ],
     cleanup: {
       enabled: true,
-      keepLatestDownloads: 3,
-      keepLatestOutputs: 5,
+      keepLatestDownloads: 0,
+      keepLatestOutputs: 0,
       removed: []
     },
     logs: []
@@ -185,14 +185,15 @@ async function runPipeline(run) {
       await runStep(run, step);
     } catch (error) {
       run.status = 'failed';
-      run.finishedAt = new Date().toISOString();
       appendLog(run, step.id, 'error', error instanceof Error ? error.message : String(error));
-      return;
+      break;
     }
   }
 
   cleanupArtifacts(run);
-  run.status = 'completed';
+  if (run.status === 'running') {
+    run.status = 'completed';
+  }
   run.finishedAt = new Date().toISOString();
 }
 
