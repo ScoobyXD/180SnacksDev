@@ -91,12 +91,6 @@ body {
   height: 540px;
 }
 
-.pipeline-group {
-  position: absolute;
-  width: 920px;
-  height: 540px;
-}
-
 .widget-head {
   border-bottom: 1px solid rgba(16, 19, 24, 0.14);
   padding: 8px 10px;
