@@ -3,11 +3,26 @@ const statusText = document.getElementById('statusText');
 const stepsList = document.getElementById('steps');
 const logsEl = document.getElementById('logs');
 const clockEl = document.getElementById('clock');
-const servicesWidget = document.getElementById('servicesWidget');
-const logsWidget = document.getElementById('logsWidget');
+const branchTree = document.getElementById('branchTree');
+const canvas = document.getElementById('canvas');
+const world = document.getElementById('world');
 
 let currentRunId = null;
 let pollTimer = null;
+
+const pan = {
+  x: -280,
+  y: -180,
+  dragging: false,
+  startMouseX: 0,
+  startMouseY: 0,
+  startX: 0,
+  startY: 0
+};
+
+function applyPan() {
+  world.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
+}
 
 function setStatus(text) {
   statusText.textContent = text;
@@ -19,8 +34,7 @@ function tickClock() {
 }
 
 function showRuntimeWidgets() {
-  servicesWidget.classList.remove('hidden');
-  logsWidget.classList.remove('hidden');
+  branchTree.classList.remove('hidden');
 }
 
 function renderSteps(steps = []) {
@@ -92,11 +106,9 @@ async function startRun() {
   setStatus('Starting pipeline run...');
 
   try {
-    const response = await fetch('/api/runs', {
-      method: 'POST'
-    });
-
+    const response = await fetch('/api/runs', { method: 'POST' });
     const payload = await response.json();
+
     if (!response.ok) {
       const message = payload?.error || 'Could not start run';
       throw new Error(message);
@@ -120,56 +132,45 @@ async function startRun() {
   }
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function makeWidgetDraggable(widget) {
-  const handle = widget.querySelector('.drag-handle');
-  if (!handle) {
+canvas.addEventListener('pointerdown', (event) => {
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest('.widget')) {
     return;
   }
 
-  let dragging = false;
-  let offsetX = 0;
-  let offsetY = 0;
+  pan.dragging = true;
+  pan.startMouseX = event.clientX;
+  pan.startMouseY = event.clientY;
+  pan.startX = pan.x;
+  pan.startY = pan.y;
+  canvas.classList.add('panning');
+  canvas.setPointerCapture(event.pointerId);
+});
 
-  handle.addEventListener('pointerdown', (event) => {
-    dragging = true;
-    widget.style.zIndex = String(Date.now());
-    const rect = widget.getBoundingClientRect();
-    offsetX = event.clientX - rect.left;
-    offsetY = event.clientY - rect.top;
-    handle.setPointerCapture(event.pointerId);
-  });
+canvas.addEventListener('pointermove', (event) => {
+  if (!pan.dragging) {
+    return;
+  }
 
-  handle.addEventListener('pointermove', (event) => {
-    if (!dragging) {
-      return;
-    }
+  pan.x = pan.startX + (event.clientX - pan.startMouseX);
+  pan.y = pan.startY + (event.clientY - pan.startMouseY);
+  applyPan();
+});
 
-    const maxX = window.innerWidth - widget.offsetWidth - 8;
-    const maxY = window.innerHeight - widget.offsetHeight - 8;
-    const nextX = clamp(event.clientX - offsetX, 8, Math.max(8, maxX));
-    const nextY = clamp(event.clientY - offsetY, 8, Math.max(8, maxY));
+function stopPan(event) {
+  if (!pan.dragging) {
+    return;
+  }
 
-    widget.style.left = `${nextX}px`;
-    widget.style.top = `${nextY}px`;
-  });
-
-  const stopDragging = (event) => {
-    if (!dragging) {
-      return;
-    }
-    dragging = false;
-    handle.releasePointerCapture(event.pointerId);
-  };
-
-  handle.addEventListener('pointerup', stopDragging);
-  handle.addEventListener('pointercancel', stopDragging);
+  pan.dragging = false;
+  canvas.classList.remove('panning');
+  canvas.releasePointerCapture(event.pointerId);
 }
 
+canvas.addEventListener('pointerup', stopPan);
+canvas.addEventListener('pointercancel', stopPan);
+
 runButton.addEventListener('click', startRun);
-document.querySelectorAll('.draggable').forEach(makeWidgetDraggable);
 setInterval(tickClock, 1000);
+applyPan();
 tickClock();
