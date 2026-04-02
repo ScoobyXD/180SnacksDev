@@ -55,7 +55,7 @@ Output workbook columns are exactly:
 
 ## Airtable sync (current)
 - Optional Airtable sync is now supported behind environment flags.
-- If `AIRTABLE_SYNC_ENABLED=true`, the script can ensure a test table exists and then upsert normalized rows.
+- If `AIRTABLE_SYNC_ENABLED=true`, the script can find/create the base, find/create the table, then append normalized rows.
 - If no `--input` is passed, the script auto-selects the newest `.xlsx` in `../IRIDev/artifacts/downloads`.
 
 ## Out of scope for v0
@@ -77,7 +77,7 @@ Fixture rows are test-case mini datasets (5–10 representative rows) used to lo
 - `--input` optional. If omitted, newest raw IRIDev download is selected automatically.
 - `--output` optional (auto timestamped default)
 - Week ending is not accepted as CLI input; it is sourced from Shape 1 metadata only.
-- Airtable sync is controlled with env vars (see `.env.example`).
+- Airtable sync is controlled with env vars (see `.env.example`), including smart base/table create options.
 
 ## Success criteria (v0)
 - Given a known input workbook, output workbook is created.

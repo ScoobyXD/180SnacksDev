@@ -41,19 +41,106 @@ async function airtableRequest(url, { method = 'GET', body, token }) {
   return text ? JSON.parse(text) : {};
 }
 
+function inferField(name) {
+  if (name === 'Date' || name.includes('Week Ending')) {
+    return { name, type: 'singleLineText' };
+  }
+
+  if (name.includes('Sales') || name.includes('Units') || name.includes('Price') || name.includes('Inventory')) {
+    return { name, type: 'number', options: { precision: 4 } };
+  }
+
+  return { name, type: 'singleLineText' };
+}
+
+async function listWorkspaceBases(config) {
+  const workspaceUrl = `https://api.airtable.com/v0/meta/workspaces/${config.workspaceId}/bases`;
+  const payload = await airtableRequest(workspaceUrl, { token: config.token });
+  return payload.bases ?? [];
+}
+
+async function createBase(config, fieldNames) {
+  const workspaceUrl = `https://api.airtable.com/v0/meta/workspaces/${config.workspaceId}/bases`;
+  const payload = await airtableRequest(workspaceUrl, {
+    method: 'POST',
+    token: config.token,
+    body: {
+      name: config.baseName,
+      tables: [
+        {
+          name: config.tableName,
+          fields: fieldNames.map(inferField)
+        }
+      ]
+    }
+  });
+
+  return {
+    baseId: payload.id,
+    created: true,
+    createdBase: true,
+    createdTable: true,
+    tableId: payload.tables?.[0]?.id ?? null
+  };
+}
+
 export function getAirtableConfig() {
   const enabled = toBoolean(process.env.AIRTABLE_SYNC_ENABLED);
   if (!enabled) {
     return { enabled: false };
   }
 
+  const baseId = process.env.AIRTABLE_BASE_ID;
+  const workspaceId = process.env.AIRTABLE_WORKSPACE_ID;
+  const baseName = process.env.AIRTABLE_BASE_NAME;
+
+  if (!baseId && (!workspaceId || !baseName)) {
+    throw new Error(
+      'Set AIRTABLE_BASE_ID, or provide AIRTABLE_WORKSPACE_ID + AIRTABLE_BASE_NAME so the script can find/create the base.'
+    );
+  }
+
   return {
     enabled: true,
     token: getEnv('AIRTABLE_TOKEN', { required: true }),
-    baseId: getEnv('AIRTABLE_BASE_ID', { required: true }),
+    baseId,
+    workspaceId,
+    baseName,
     tableName: getEnv('AIRTABLE_TABLE_NAME', { required: true }),
+    createBaseIfMissing: toBoolean(process.env.AIRTABLE_CREATE_BASE_IF_MISSING),
     createTableIfMissing: toBoolean(process.env.AIRTABLE_CREATE_TABLE_IF_MISSING)
   };
+}
+
+export async function ensureAirtableBaseAndTable(config, fieldNames) {
+  if (config.baseId) {
+    const tableInfo = await ensureAirtableTable({ ...config, baseId: config.baseId }, fieldNames);
+    return {
+      baseId: config.baseId,
+      createdBase: false,
+      ...tableInfo
+    };
+  }
+
+  const existingBases = await listWorkspaceBases(config);
+  const existingBase = existingBases.find((base) => base.name === config.baseName);
+
+  if (existingBase) {
+    const tableInfo = await ensureAirtableTable({ ...config, baseId: existingBase.id }, fieldNames);
+    return {
+      baseId: existingBase.id,
+      createdBase: false,
+      ...tableInfo
+    };
+  }
+
+  if (!config.createBaseIfMissing) {
+    throw new Error(
+      `Airtable base "${config.baseName}" not found in workspace ${config.workspaceId}. Set AIRTABLE_CREATE_BASE_IF_MISSING=true to create it automatically.`
+    );
+  }
+
+  return createBase(config, fieldNames);
 }
 
 export async function ensureAirtableTable(config, fieldNames) {
@@ -62,83 +149,52 @@ export async function ensureAirtableTable(config, fieldNames) {
 
   const existing = meta.tables?.find((table) => table.name === config.tableName);
   if (existing) {
-    return { created: false, tableId: existing.id };
+    return { createdTable: false, tableId: existing.id };
   }
 
   if (!config.createTableIfMissing) {
     throw new Error(
-      `Airtable table \"${config.tableName}\" not found. Set AIRTABLE_CREATE_TABLE_IF_MISSING=true to allow automatic creation.`
+      `Airtable table "${config.tableName}" not found in base ${config.baseId}. Set AIRTABLE_CREATE_TABLE_IF_MISSING=true to allow automatic creation.`
     );
   }
-
-  const fields = fieldNames.map((name) => {
-    if (name === 'Date') {
-      return { name, type: 'multilineText' };
-    }
-    if (name.includes('Sales') || name.includes('Units') || name.includes('Price') || name.includes('Inventory')) {
-      return { name, type: 'number', options: { precision: 4 } };
-    }
-    return { name, type: 'singleLineText' };
-  });
-
-  fields.push({ name: 'Record Key', type: 'singleLineText' });
 
   const created = await airtableRequest(baseUrl, {
     method: 'POST',
     token: config.token,
     body: {
       name: config.tableName,
-      fields
+      fields: fieldNames.map(inferField)
     }
   });
 
-  return { created: true, tableId: created.id };
+  return { createdTable: true, tableId: created.id };
 }
 
-function createRecordKey(row) {
-  return [row.Item, row.Region, row.Venue, row['Week Ending Date']].map((value) => String(value ?? '')).join('|');
-}
-
-export async function syncRowsToAirtable(config, rows) {
+export async function appendRowsToAirtable(config, rows) {
   if (!rows.length) {
-    return { synced: 0, createdRecords: 0, updatedRecords: 0, batches: 0 };
+    return { appended: 0, batches: 0 };
   }
 
   const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
   const batches = chunk(rows, BATCH_SIZE);
-  let synced = 0;
-  let createdRecords = 0;
-  let updatedRecords = 0;
+  let appended = 0;
 
   for (const batch of batches) {
-    const records = batch.map((row) => ({
-      fields: {
-        ...row,
-        'Record Key': createRecordKey(row)
-      }
-    }));
-
+    const records = batch.map((row) => ({ fields: row }));
     const result = await airtableRequest(url, {
-      method: 'PATCH',
+      method: 'POST',
       token: config.token,
       body: {
-        performUpsert: {
-          fieldsToMergeOn: ['Record Key']
-        },
         records,
         typecast: true
       }
     });
 
-    synced += records.length;
-    createdRecords += result.createdRecords?.length ?? 0;
-    updatedRecords += result.updatedRecords?.length ?? 0;
+    appended += result.records?.length ?? records.length;
   }
 
   return {
-    synced,
-    createdRecords,
-    updatedRecords,
+    appended,
     batches: batches.length
   };
 }

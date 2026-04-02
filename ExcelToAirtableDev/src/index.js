@@ -3,7 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import ExcelJS from 'exceljs';
-import { ensureAirtableTable, getAirtableConfig, syncRowsToAirtable } from './airtable.js';
+import { appendRowsToAirtable, ensureAirtableBaseAndTable, getAirtableConfig } from './airtable.js';
 import { getOutputColumns, transformRows } from './transform.js';
 import { detectWeekEndingFromShapesFile } from './weekEnding.js';
 
@@ -157,13 +157,17 @@ async function main() {
 
   if (airtableConfig.enabled) {
     const outputColumns = getOutputColumns();
-    const ensured = await ensureAirtableTable(airtableConfig, outputColumns);
-    const syncResult = await syncRowsToAirtable(airtableConfig, normalizedRows);
+    const ensured = await ensureAirtableBaseAndTable(airtableConfig, outputColumns);
+    const appendResult = await appendRowsToAirtable(
+      { ...airtableConfig, baseId: ensured.baseId },
+      normalizedRows
+    );
     airtable = {
       enabled: true,
+      baseId: ensured.baseId,
       tableName: airtableConfig.tableName,
       ...ensured,
-      ...syncResult
+      ...appendResult
     };
   }
 
