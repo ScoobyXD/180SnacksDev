@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>180SnacksRTS</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="grid-overlay" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">180SNACKS RTS</div>
+        <div class="tag">REAL-TIME TRANSFER SYSTEM</div>
+        <div id="clock" class="clock">--:--:--</div>
+      </header>
+
+      <section class="hero">
+        <h1>Costco Reports → Airtable</h1>
+        <p>Human-operated pipeline control with live service telemetry.</p>
+      </section>
+
+      <section class="panel control-panel">
+        <button id="runButton" class="run-btn">Run Pipeline</button>
+        <div id="statusText" class="status-line">No run started.</div>
+      </section>
+
+      <section class="panel columns">
+        <div>
+          <h2>Services</h2>
+          <ol id="steps" class="steps"></ol>
+        </div>
+        <div>
+          <h2>Run Metadata</h2>
+          <dl id="meta" class="meta"></dl>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Execution Logs</h2>
+        <pre id="logs" class="logs">Waiting for pipeline run...</pre>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -190,6 +190,21 @@ async function main() {
       { ...airtableConfig, baseId: ensured.baseId },
       normalizedRows
     );
+
+    if (appendResult.rejected > 0) {
+      fs.mkdirSync('artifacts/rejects', { recursive: true });
+      const rejectPath = path.join(
+        'artifacts',
+        'rejects',
+        `${new Date().toISOString().replace(/[:.]/g, '-')}-airtable-rejects.json`
+      );
+      fs.writeFileSync(rejectPath, JSON.stringify(appendResult.rejects, null, 2), 'utf8');
+      throw new Error(
+        `Airtable accepted ${appendResult.appended} rows but rejected ${appendResult.rejected} rows. ` +
+        `Reject details saved to ${rejectPath}. First reject: ${appendResult.rejects[0]?.message ?? 'unknown error'}`
+      );
+    }
+
     airtable = {
       enabled: true,
       baseId: ensured.baseId,
