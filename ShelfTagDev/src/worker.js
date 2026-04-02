@@ -168,6 +168,24 @@ async function handleSync(request, env) {
 // GEMINI FLASH LITE — Image → Structured Product Data
 // ============================================================================
 
+
+const PRODUCT_CATEGORIES = [
+    "Nuts",
+    "Seeds",
+    "Trail Mix",
+    "Clusters",
+    "Bars",
+    "Confectionery",
+    "Candy",
+    "Chips",
+    "Savory Snack",
+    "Popcorn",
+    "Snack Mix",
+    "Dried Fruit",
+    "Frozen/Refrigerated",
+    "Others",
+];
+
 const EXTRACTION_PROMPT = `You are analyzing one or more photos of the SAME snack product on a retail store shelf.
 Your job is to combine information across all provided images and extract specific product information.
 
@@ -183,25 +201,29 @@ Extract the following fields:
    - Example: "Almonds, Walnuts, Raisins, Dried Cranberries, Hazelnuts, Pecans"
    - Look for ingredient callouts on the front of the package, NOT the nutrition facts panel.
 
-4. **count**: The weight or size exactly as printed on the package (e.g. "16oz", "8ct 1.75oz", "1 LB 454g").
+4. **category**: Classify the product into EXACTLY ONE of these categories:
+   - "Nuts", "Seeds", "Trail Mix", "Clusters", "Bars", "Confectionery", "Candy", "Chips", "Savory Snack", "Popcorn", "Snack Mix", "Dried Fruit", "Frozen/Refrigerated", "Others"
+   - Use "Others" only if none of the other categories clearly fit.
+
+5. **count**: The weight or size exactly as printed on the package (e.g. "16oz", "8ct 1.75oz", "1 LB 454g").
    - Copy this exactly as written on the package.
 
-5. **type**: Classify the product packaging as ONE of these three options:
+6. **type**: Classify the product packaging as ONE of these three options:
    - "Single Bag" — a single bag/pouch/container sold individually
    - "Multi Box" — a box containing multiple individual bags/pouches
    - "Multi Bag" — multiple bags bundled/wrapped together as one unit
 
-6. **nw_oz**: The total net weight in OUNCES as a decimal number.
+7. **nw_oz**: The total net weight in OUNCES as a decimal number.
    - For single items: just the weight in oz (convert from grams if needed: grams ÷ 28.3495)
    - For multi-packs: multiply count × per-unit weight (e.g. 8 × 1.75oz = 14.0)
    - Return as a number, not a string.
 
-7. **retail_regular**: The regular retail price from the shelf tag or price label.
+8. **retail_regular**: The regular retail price from the shelf tag or price label.
    - Look for the price tag on the shelf, NOT on the product packaging.
    - If both a sale price and regular price are shown, use the REGULAR price.
    - Return as a number without the dollar sign (e.g. 4.19, not "$4.19").
 
-8. **retail_discounted**: The discounted/sale price from the shelf tag if present.
+9. **retail_discounted**: The discounted/sale price from the shelf tag if present.
    - Return the discounted price when it is explicitly shown (club price, sale price, promo price).
    - If no discounted price is visible, return null.
    - Return as a number without the dollar sign.
@@ -220,13 +242,14 @@ const RESPONSE_SCHEMA = {
         flavor: { type: "string", nullable: true },
         brand: { type: "string", nullable: true },
         flavor_description: { type: "string", nullable: true },
+        category: { type: "string", nullable: true, enum: PRODUCT_CATEGORIES },
         count: { type: "string", nullable: true },
         type: { type: "string", nullable: true, enum: ["Single Bag", "Multi Box", "Multi Bag"] },
         nw_oz: { type: "number", nullable: true },
         retail_regular: { type: "number", nullable: true },
         retail_discounted: { type: "number", nullable: true },
     },
-    required: ["flavor", "brand", "flavor_description", "count", "type", "nw_oz", "retail_regular", "retail_discounted"]
+    required: ["flavor", "brand", "flavor_description", "category", "count", "type", "nw_oz", "retail_regular", "retail_discounted"]
 };
 
 
@@ -299,6 +322,7 @@ async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId
     if (extraction.flavor != null) fields["Flavor"] = extraction.flavor;
     if (extraction.brand != null) fields["Brand"] = extraction.brand;
     if (extraction.flavor_description != null) fields["Flavor Description"] = extraction.flavor_description;
+    if (extraction.category != null) fields["Category"] = extraction.category;
     if (extraction.count != null) fields["Count"] = extraction.count;
     if (extraction.type != null) fields["Type"] = extraction.type;
     if (extraction.nw_oz != null) fields["NW oz"] = extraction.nw_oz;
@@ -317,6 +341,12 @@ async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId
 
     // Image attachment — Airtable downloads from this URL
     fields["Image"] = imageUrls.map((url) => ({ url })); // Multiple images in single row supported
+
+    const retailerMarkup = getRetailerMarkup(metadata.retailer);
+    if (retailerMarkup != null && extraction.retail_regular != null) {
+        const soldPrice = extraction.retail_regular * (1 - retailerMarkup);
+        fields["Price Sold To Retailer"] = Number(soldPrice.toFixed(2));
+    }
 
     // Currency note
     if (currencyNote) fields["Notes"] = currencyNote;
@@ -372,6 +402,7 @@ async function handleImage(pathname, env) {
 // ============================================================================
 // HELPERS
 // ============================================================================
+
 
 /**
  * Convert a base64 string to a Uint8Array.
