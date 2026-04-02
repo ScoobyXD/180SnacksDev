@@ -186,24 +186,6 @@ const PRODUCT_CATEGORIES = [
     "Others",
 ];
 
-const RETAILER_MARKUP_MAP = {
-    "sam's club": 0.17,
-    "tj maxx": 0.52,
-    "marshall's": 0.52,
-    "homegoods": 0.52,
-    "burlington": 0.50,
-    "ross": 0.45,
-    "trader joe's": 0.42,
-    "dollar tree": 0.41,
-    "dollar general": 0.38,
-    "grocery outlet": 0.45,
-    "cvs": 0.42,
-    "smart & final": 0.30,
-    "whole foods": 0.50,
-    "aldi": 0.50,
-    "walmart": 0.50,
-};
-
 const EXTRACTION_PROMPT = `You are analyzing one or more photos of the SAME snack product on a retail store shelf.
 Your job is to combine information across all provided images and extract specific product information.
 
@@ -421,15 +403,6 @@ async function handleImage(pathname, env) {
 // HELPERS
 // ============================================================================
 
-
-function getRetailerMarkup(retailer) {
-    if (!retailer) return null;
-
-    const normalized = retailer.trim().toLowerCase();
-    if (normalized.includes('costco')) return 0.17;
-
-    return RETAILER_MARKUP_MAP[normalized] ?? null;
-}
 
 /**
  * Convert a base64 string to a Uint8Array.

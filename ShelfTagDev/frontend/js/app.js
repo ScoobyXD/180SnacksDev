@@ -38,33 +38,50 @@ const APP_VERSION = 'v01.08';
  */
 const MAX_GALLERY_UPLOAD_COUNT = 30;
 
-const RETAILER_OPTIONS = [
-    'Aldi',
-    'Burlington',
-    'Costco BA',
-    'Costco Canada East',
-    'Costco Canada West',
-    'Costco LA',
-    'Costco MW',
-    'Costco NE',
-    'Costco NW',
-    'Costco SD',
-    'Costco SE',
-    'Costco TX',
-    'CVS',
-    'Dollar General',
-    'Dollar Tree',
-    'Grocery Outlet',
-    'HomeGoods',
-    "Marshall's",
-    'Ross',
-    "Sam's Club",
-    'Smart & Final',
-    'TJ Maxx',
-    "Trader Joe's",
-    'Walmart',
-    'Whole Foods',
+const RETAILER_SECTIONS = [
+    {
+        label: 'Costco (US)',
+        options: [
+            'Costco BA',
+            'Costco LA',
+            'Costco MW',
+            'Costco NE',
+            'Costco NW',
+            'Costco SD',
+            'Costco SE',
+            'Costco TX',
+        ],
+    },
+    {
+        label: 'Costco (Outside US)',
+        options: [
+            'Costco Canada East',
+            'Costco Canada West',
+        ],
+    },
+    {
+        label: 'Other Retailers',
+        options: [
+            'Aldi',
+            'Burlington',
+            'CVS',
+            'Dollar General',
+            'Dollar Tree',
+            'Grocery Outlet',
+            'HomeGoods',
+            "Marshall's",
+            'Ross',
+            "Sam's Club",
+            'Smart & Final',
+            'TJ Maxx',
+            "Trader Joe's",
+            'Walmart',
+            'Whole Foods',
+        ],
+    },
 ];
+
+const RETAILER_OPTIONS = RETAILER_SECTIONS.flatMap((section) => section.options);
 
 // ============================================================================
 // APP STATE
@@ -184,11 +201,18 @@ function initRetailerOptions() {
     const retailerSelect = document.getElementById('retailer-name');
     if (!retailerSelect) return;
 
-    RETAILER_OPTIONS.forEach((retailer) => {
-        const option = document.createElement('option');
-        option.value = retailer;
-        option.textContent = retailer;
-        retailerSelect.appendChild(option);
+    RETAILER_SECTIONS.forEach((section) => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = section.label;
+
+        section.options.forEach((retailer) => {
+            const option = document.createElement('option');
+            option.value = retailer;
+            option.textContent = retailer;
+            optgroup.appendChild(option);
+        });
+
+        retailerSelect.appendChild(optgroup);
     });
 }
 
