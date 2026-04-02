@@ -7,6 +7,17 @@ import { appendRowsToAirtable, ensureAirtableBaseAndTable, getAirtableConfig } f
 import { getOutputColumns, transformRows } from './transform.js';
 import { detectWeekEndingFromShapesFile } from './weekEnding.js';
 
+
+function loadEnvFiles() {
+  const envFiles = ['.env', '.env.local'];
+  for (const filename of envFiles) {
+    const fullPath = path.resolve(process.cwd(), filename);
+    if (fs.existsSync(fullPath)) {
+      process.loadEnvFile(fullPath);
+    }
+  }
+}
+
 function getArg(name) {
   const arg = process.argv.find((item) => item.startsWith(`--${name}=`));
   return arg ? arg.split('=').slice(1).join('=') : undefined;
@@ -139,6 +150,7 @@ async function saveOutputWorkbook(records, outputPath) {
 }
 
 async function main() {
+  loadEnvFiles();
   const inputPath = resolveInputPath();
   const outputPath = getArg('output') ?? defaultOutputPath(inputPath);
 

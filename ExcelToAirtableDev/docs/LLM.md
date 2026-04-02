@@ -78,6 +78,7 @@ Fixture rows are test-case mini datasets (5–10 representative rows) used to lo
 - `--output` optional (auto timestamped default)
 - Week ending is not accepted as CLI input; it is sourced from Shape 1 metadata only.
 - Airtable sync is controlled with env vars (see `.env.example`), including smart base/table create options.
+- Runtime automatically loads `.env` / `.env.local` from `ExcelToAirtableDev` before evaluating flags.
 
 ## Success criteria (v0)
 - Given a known input workbook, output workbook is created.
