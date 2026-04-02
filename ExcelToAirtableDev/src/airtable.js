@@ -1,6 +1,7 @@
 import process from 'node:process';
 
 const BATCH_SIZE = 10;
+const CURRENCY_FIELDS = new Set(['Dollar Sales', 'Average Price per Unit']);
 
 function getEnv(name, { required = false } = {}) {
   const value = process.env[name];
@@ -44,6 +45,17 @@ async function airtableRequest(url, { method = 'GET', body, token }) {
 function inferField(name) {
   if (name === 'Date' || name.includes('Week Ending')) {
     return { name, type: 'singleLineText' };
+  }
+
+  if (CURRENCY_FIELDS.has(name)) {
+    return {
+      name,
+      type: 'currency',
+      options: {
+        precision: 4,
+        symbol: '$'
+      }
+    };
   }
 
   if (name.includes('Sales') || name.includes('Units') || name.includes('Price') || name.includes('Inventory')) {
