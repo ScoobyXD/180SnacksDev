@@ -61,6 +61,7 @@ body {
   width: 12000px;
   height: 12000px;
   transform: translate(-4900px, -4400px);
+  transform-origin: 0 0;
   background: var(--bg);
 }
 
@@ -124,7 +125,7 @@ body {
 
 .branch-tree {
   position: absolute;
-  width: 780px;
+  width: 720px;
   height: 430px;
 }
 
@@ -136,7 +137,9 @@ body {
 .branch-lines path {
   fill: none;
   stroke: #12161e;
-  stroke-width: 2;
+  stroke-width: 3;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
 }
 
 .branch-lines .node {
