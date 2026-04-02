@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>180SnacksRTS</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="grid-overlay" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand">180SNACKS RTS</div>
+      <div class="tag">CHANGE REALITY</div>
+      <div id="clock" class="clock">--:--:--</div>
+    </header>
+
+    <main class="canvas" id="canvas">
+      <section class="widget core-widget draggable" data-drag-id="core" style="left: 80px; top: 120px;">
+        <div class="drag-handle">
+          <span>Pipeline Control</span>
+          <span class="drag-hint">drag</span>
+        </div>
+        <h1>Costco → Airtable</h1>
+        <button id="runButton" class="run-btn">Run</button>
+        <p id="statusText" class="status-line">No run started.</p>
+      </section>
+
+      <section id="servicesWidget" class="widget draggable hidden" data-drag-id="services" style="left: 80px; top: 360px;">
+        <div class="drag-handle">
+          <span>Services</span>
+          <span class="drag-hint">drag</span>
+        </div>
+        <ol id="steps" class="steps"></ol>
+      </section>
+
+      <section id="logsWidget" class="widget draggable hidden" data-drag-id="logs" style="left: 520px; top: 360px;">
+        <div class="drag-handle">
+          <span>Execution Logs</span>
+          <span class="drag-hint">drag</span>
+        </div>
+        <pre id="logs" class="logs">Waiting for pipeline run...</pre>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
