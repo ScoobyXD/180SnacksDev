@@ -7,6 +7,7 @@ import { appendRowsToAirtable, ensureAirtableBaseAndTable, getAirtableConfig } f
 import { getOutputColumns, transformRows } from './transform.js';
 import { detectWeekEndingFromShapesFile } from './weekEnding.js';
 
+const CURRENCY_COLUMNS = new Set(['Dollar Sales', 'Average Price per Unit']);
 
 function loadEnvFiles() {
   const envFiles = ['.env', '.env.local'];
@@ -144,6 +145,21 @@ async function saveOutputWorkbook(records, outputPath) {
   worksheet.addRow(outputHeaders);
   for (const record of records) {
     worksheet.addRow(outputHeaders.map((header) => record[header] ?? null));
+  }
+
+  for (let columnIndex = 0; columnIndex < outputHeaders.length; columnIndex += 1) {
+    const header = outputHeaders[columnIndex];
+    if (!CURRENCY_COLUMNS.has(header)) {
+      continue;
+    }
+
+    const worksheetColumn = worksheet.getColumn(columnIndex + 1);
+    worksheetColumn.eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+      if (rowNumber === 1 || typeof cell.value !== 'number') {
+        return;
+      }
+      cell.numFmt = '$#,##0.0000';
+    });
   }
 
   await workbook.xlsx.writeFile(outputPath);
