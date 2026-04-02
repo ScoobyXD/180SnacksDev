@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "run": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "run:auto": "node src/index.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
