@@ -69,6 +69,13 @@ Approved structure:
 - Dragging a pipeline card drags the entire `#pipelineGroup`.
 - Interactive controls (e.g., Run button, form controls, log text area behavior) should remain usable and not be hijacked by drag handling.
 
+## Runtime Cleanup Policy
+
+- Artifact cleanup runs at the end of **every** pipeline run (success or failure).
+- `.xlsx` files are deleted from:
+  - `IRIDev/artifacts/downloads`
+  - `ExcelToAirtableDev/artifacts`
+
 ## Guardrails for Future Edits
 
 When modifying the RTS UI:

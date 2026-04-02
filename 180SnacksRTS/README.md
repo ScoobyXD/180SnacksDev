@@ -21,9 +21,9 @@ Open `http://localhost:4010` and click **Run Pipeline**.
 
 - Sequential run with live status + logs.
 - One active run at a time.
-- On successful completion, old `.xlsx` artifacts are auto-pruned:
-  - `IRIDev/artifacts/downloads`: keep latest 3
-  - `ExcelToAirtableDev/artifacts`: keep latest 5
+- At the end of every run (success or failure), `.xlsx` artifacts are deleted:
+  - `IRIDev/artifacts/downloads`: remove all `.xlsx`
+  - `ExcelToAirtableDev/artifacts`: remove all `.xlsx`
 
 ## Important
 

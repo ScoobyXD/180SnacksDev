@@ -1,7 +1,12 @@
 import process from 'node:process';
 
 const BATCH_SIZE = 10;
-const CURRENCY_FIELDS = new Set(['Dollar Sales', 'Average Price per Unit']);
+const CURRENCY_FIELDS = new Set([
+  'Dollar Sales',
+  'Average Price per Unit',
+  'Average Coupon Value',
+  'Average Promoted Price'
+]);
 
 function getEnv(name, { required = false } = {}) {
   const value = process.env[name];
