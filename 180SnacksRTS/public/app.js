@@ -2,8 +2,9 @@ const runButton = document.getElementById('runButton');
 const statusText = document.getElementById('statusText');
 const stepsList = document.getElementById('steps');
 const logsEl = document.getElementById('logs');
-const metaEl = document.getElementById('meta');
 const clockEl = document.getElementById('clock');
+const servicesWidget = document.getElementById('servicesWidget');
+const logsWidget = document.getElementById('logsWidget');
 
 let currentRunId = null;
 let pollTimer = null;
@@ -15,6 +16,11 @@ function setStatus(text) {
 function tickClock() {
   const now = new Date();
   clockEl.textContent = now.toLocaleTimeString();
+}
+
+function showRuntimeWidgets() {
+  servicesWidget.classList.remove('hidden');
+  logsWidget.classList.remove('hidden');
 }
 
 function renderSteps(steps = []) {
@@ -32,25 +38,6 @@ function renderSteps(steps = []) {
 
     li.append(label, badge);
     stepsList.appendChild(li);
-  }
-}
-
-function renderMeta(run) {
-  const entries = [
-    ['Run ID', run.id],
-    ['Status', run.status],
-    ['Started', run.startedAt || '—'],
-    ['Finished', run.finishedAt || '—'],
-    ['Cleanup Removed', String(run.cleanup?.removed?.length ?? 0)]
-  ];
-
-  metaEl.innerHTML = '';
-  for (const [key, value] of entries) {
-    const dt = document.createElement('dt');
-    dt.textContent = key;
-    const dd = document.createElement('dd');
-    dd.textContent = value;
-    metaEl.append(dt, dd);
   }
 }
 
@@ -83,9 +70,9 @@ async function refreshRun() {
 
   try {
     const run = await fetchRun(currentRunId);
+    showRuntimeWidgets();
     setStatus(`Run ${run.id} is ${run.status}.`);
     renderSteps(run.steps);
-    renderMeta(run);
     renderLogs(run.logs);
 
     const finished = run.status === 'completed' || run.status === 'failed';
@@ -116,8 +103,8 @@ async function startRun() {
     }
 
     currentRunId = payload.id;
+    showRuntimeWidgets();
     renderSteps(payload.steps);
-    renderMeta(payload);
     renderLogs(payload.logs);
     setStatus(`Run ${payload.id} started.`);
 
@@ -133,6 +120,56 @@ async function startRun() {
   }
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function makeWidgetDraggable(widget) {
+  const handle = widget.querySelector('.drag-handle');
+  if (!handle) {
+    return;
+  }
+
+  let dragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  handle.addEventListener('pointerdown', (event) => {
+    dragging = true;
+    widget.style.zIndex = String(Date.now());
+    const rect = widget.getBoundingClientRect();
+    offsetX = event.clientX - rect.left;
+    offsetY = event.clientY - rect.top;
+    handle.setPointerCapture(event.pointerId);
+  });
+
+  handle.addEventListener('pointermove', (event) => {
+    if (!dragging) {
+      return;
+    }
+
+    const maxX = window.innerWidth - widget.offsetWidth - 8;
+    const maxY = window.innerHeight - widget.offsetHeight - 8;
+    const nextX = clamp(event.clientX - offsetX, 8, Math.max(8, maxX));
+    const nextY = clamp(event.clientY - offsetY, 8, Math.max(8, maxY));
+
+    widget.style.left = `${nextX}px`;
+    widget.style.top = `${nextY}px`;
+  });
+
+  const stopDragging = (event) => {
+    if (!dragging) {
+      return;
+    }
+    dragging = false;
+    handle.releasePointerCapture(event.pointerId);
+  };
+
+  handle.addEventListener('pointerup', stopDragging);
+  handle.addEventListener('pointercancel', stopDragging);
+}
+
 runButton.addEventListener('click', startRun);
+document.querySelectorAll('.draggable').forEach(makeWidgetDraggable);
 setInterval(tickClock, 1000);
 tickClock();
