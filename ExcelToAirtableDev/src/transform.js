@@ -7,24 +7,14 @@ const OUTPUT_COLUMNS = [
   'Dollar Sales',
   'Unit Sales',
   'Inventory On Hand',
-  'Average Price per Unit',
-  'NSI Units On Hand',
-  'Refund Units',
-  'Average Inventory per Day',
-  'Average Coupon Value',
-  'Average Promoted Price'
+  'Average Price per Unit'
 ];
 
 const METRIC_COLUMNS = [
   'Dollar Sales',
   'Unit Sales',
   'Inventory On Hand',
-  'Average Price per Unit',
-  'NSI Units On Hand',
-  'Refund Units',
-  'Average Inventory per Day',
-  'Average Coupon Value',
-  'Average Promoted Price'
+  'Average Price per Unit'
 ];
 
 function asCleanString(value) {
@@ -113,12 +103,7 @@ export function transformRows(inputRows, { weekEnding = '' } = {}) {
       'Dollar Sales': null,
       'Unit Sales': null,
       'Inventory On Hand': null,
-      'Average Price per Unit': null,
-      'NSI Units On Hand': null,
-      'Refund Units': null,
-      'Average Inventory per Day': null,
-      'Average Coupon Value': null,
-      'Average Promoted Price': null
+      'Average Price per Unit': null
     };
 
     for (const metricColumn of METRIC_COLUMNS) {

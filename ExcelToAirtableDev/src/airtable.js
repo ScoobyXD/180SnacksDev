@@ -3,9 +3,7 @@ import process from 'node:process';
 const BATCH_SIZE = 10;
 const CURRENCY_FIELDS = new Set([
   'Dollar Sales',
-  'Average Price per Unit',
-  'Average Coupon Value',
-  'Average Promoted Price'
+  'Average Price per Unit'
 ]);
 
 function getEnv(name, { required = false } = {}) {
