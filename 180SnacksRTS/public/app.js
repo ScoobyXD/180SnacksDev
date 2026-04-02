@@ -13,6 +13,7 @@ let pollTimer = null;
 const pan = {
   x: -4900,
   y: -4400,
+  scale: 1,
   dragging: false,
   startMouseX: 0,
   startMouseY: 0,
@@ -21,7 +22,7 @@ const pan = {
 };
 
 function applyPan() {
-  world.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
+  world.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`;
 }
 
 function setStatus(text) {
@@ -169,6 +170,28 @@ function stopPan(event) {
 
 canvas.addEventListener('pointerup', stopPan);
 canvas.addEventListener('pointercancel', stopPan);
+
+canvas.addEventListener('wheel', (event) => {
+  event.preventDefault();
+
+  const rect = canvas.getBoundingClientRect();
+  const pointerX = event.clientX - rect.left;
+  const pointerY = event.clientY - rect.top;
+  const zoomOut = event.deltaY > 0;
+  const factor = zoomOut ? 0.9 : 1.1;
+  const nextScale = Math.min(2.5, Math.max(0.35, pan.scale * factor));
+
+  if (nextScale === pan.scale) {
+    return;
+  }
+
+  const worldX = (pointerX - pan.x) / pan.scale;
+  const worldY = (pointerY - pan.y) / pan.scale;
+  pan.scale = nextScale;
+  pan.x = pointerX - worldX * pan.scale;
+  pan.y = pointerY - worldY * pan.scale;
+  applyPan();
+}, { passive: false });
 
 runButton.addEventListener('click', startRun);
 setInterval(tickClock, 1000);
