@@ -17,7 +17,7 @@
  *   env.AIRTABLE_TABLE_ID — Airtable table ID
  */
 
-const WORKER_VERSION = '2026-04-02-r1';
+const WORKER_VERSION = '2026-04-02-r2';
 
 export default {
     async fetch(request, env, ctx) {
@@ -345,11 +345,8 @@ async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId
     // Image attachment — Airtable downloads from this URL
     fields["Image"] = imageUrls.map((url) => ({ url })); // Multiple images in single row supported
 
-    const retailerMarkup = getRetailerMarkup(metadata.retailer);
-    if (retailerMarkup != null && extraction.retail_regular != null) {
-        const soldPrice = extraction.retail_regular * (1 - retailerMarkup);
-        fields["Price Sold To Retailer"] = Number(soldPrice.toFixed(2));
-    }
+    // NOTE: Retailer markup and "Price Sold To Retailer" are intentionally NOT computed in worker code.
+    // Those values should be handled by Airtable formulas/configuration only.
 
     // Currency note
     if (currencyNote) fields["Notes"] = currencyNote;
