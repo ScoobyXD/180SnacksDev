@@ -41,7 +41,20 @@ function asMaybeNumber(value) {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }
-  const parsed = Number(String(value).replace(/,/g, '').trim());
+  let text = String(value).trim();
+  if (!text || /^[-–—]+$/.test(text) || /^(n\/a|na|null)$/i.test(text)) {
+    return null;
+  }
+
+  text = text.replace(/\(([^)]+)\)/g, '-$1');
+  text = text.replace(/[$,%\s]/g, '');
+  text = text.replace(/[^\d.-]/g, '');
+
+  if (!text || text === '-' || text === '.' || text === '-.') {
+    return null;
+  }
+
+  const parsed = Number(text);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
