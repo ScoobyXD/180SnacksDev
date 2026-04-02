@@ -7,7 +7,12 @@ import { appendRowsToAirtable, ensureAirtableBaseAndTable, getAirtableConfig } f
 import { getOutputColumns, transformRows } from './transform.js';
 import { detectWeekEndingFromShapesFile } from './weekEnding.js';
 
-const CURRENCY_COLUMNS = new Set(['Dollar Sales', 'Average Price per Unit']);
+const CURRENCY_COLUMNS = new Set([
+  'Dollar Sales',
+  'Average Price per Unit',
+  'Average Coupon Value',
+  'Average Promoted Price'
+]);
 
 function loadEnvFiles() {
   const envFiles = ['.env', '.env.local'];
@@ -190,6 +195,13 @@ async function main() {
       { ...airtableConfig, baseId: ensured.baseId },
       normalizedRows
     );
+
+    if (appendResult.recoveredRows > 0) {
+      console.warn(
+        `Recovered ${appendResult.recoveredRows} Airtable rows by omitting invalid fields: ` +
+        `${JSON.stringify(appendResult.recoveredFields)}`
+      );
+    }
 
     if (appendResult.rejected > 0) {
       fs.mkdirSync('artifacts/rejects', { recursive: true });

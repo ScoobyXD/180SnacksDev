@@ -1,7 +1,12 @@
 import process from 'node:process';
 
 const BATCH_SIZE = 10;
-const CURRENCY_FIELDS = new Set(['Dollar Sales', 'Average Price per Unit']);
+const CURRENCY_FIELDS = new Set([
+  'Dollar Sales',
+  'Average Price per Unit',
+  'Average Coupon Value',
+  'Average Promoted Price'
+]);
 
 function getEnv(name, { required = false } = {}) {
   const value = process.env[name];
@@ -190,6 +195,12 @@ function formatRejectError(error, rowIndex, row) {
   };
 }
 
+function extractInvalidFieldName(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/Field "([^"]+)" cannot accept the provided value/i);
+  return match?.[1] ?? null;
+}
+
 async function appendSingleRecord(url, token, row, rowIndex) {
   try {
     const result = await airtableRequest(url, {
@@ -200,21 +211,47 @@ async function appendSingleRecord(url, token, row, rowIndex) {
         typecast: true
       }
     });
-    return { ok: true, count: result.records?.length ?? 1 };
+    return { ok: true, count: result.records?.length ?? 1, recoveredField: null };
   } catch (error) {
+    const invalidField = extractInvalidFieldName(error);
+    if (invalidField && Object.hasOwn(row, invalidField)) {
+      const patchedRow = { ...row };
+      delete patchedRow[invalidField];
+
+      try {
+        const retryResult = await airtableRequest(url, {
+          method: 'POST',
+          token,
+          body: {
+            records: [{ fields: patchedRow }],
+            typecast: true
+          }
+        });
+        return {
+          ok: true,
+          count: retryResult.records?.length ?? 1,
+          recoveredField: invalidField
+        };
+      } catch (retryError) {
+        return { ok: false, reject: formatRejectError(retryError, rowIndex, row) };
+      }
+    }
+
     return { ok: false, reject: formatRejectError(error, rowIndex, row) };
   }
 }
 
 export async function appendRowsToAirtable(config, rows) {
   if (!rows.length) {
-    return { appended: 0, batches: 0, rejected: 0, rejects: [] };
+    return { appended: 0, batches: 0, rejected: 0, rejects: [], recoveredRows: 0, recoveredFields: {} };
   }
 
   const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
   const batches = chunk(rows, BATCH_SIZE);
   let appended = 0;
   const rejects = [];
+  let recoveredRows = 0;
+  const recoveredFields = {};
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
@@ -241,6 +278,10 @@ export async function appendRowsToAirtable(config, rows) {
 
         if (singleResult.ok) {
           appended += singleResult.count;
+          if (singleResult.recoveredField) {
+            recoveredRows += 1;
+            recoveredFields[singleResult.recoveredField] = (recoveredFields[singleResult.recoveredField] ?? 0) + 1;
+          }
           continue;
         }
 
@@ -253,6 +294,8 @@ export async function appendRowsToAirtable(config, rows) {
     appended,
     batches: batches.length,
     rejected: rejects.length,
-    rejects
+    rejects,
+    recoveredRows,
+    recoveredFields
   };
 }
