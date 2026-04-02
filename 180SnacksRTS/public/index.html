@@ -17,29 +17,29 @@
       <div class="world" id="world">
         <div class="grid-overlay" aria-hidden="true"></div>
 
-        <section class="widget core-widget" style="left: 420px; top: 280px;">
+        <section class="widget core-widget" style="left: 5200px; top: 4700px;">
           <div class="widget-head">Pipeline Control</div>
           <h1>Costco → Airtable</h1>
           <button id="runButton" class="run-btn">Run</button>
           <p id="statusText" class="status-line">No run started.</p>
         </section>
 
-        <section id="branchTree" class="branch-tree hidden" style="left: 760px; top: 430px;">
-          <svg class="branch-lines" viewBox="0 0 420 370" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M10 10 L10 95 L95 145" />
-            <path d="M95 145 L95 300 L175 345" />
-            <path d="M95 145 L175 145" />
-            <rect x="169" y="139" width="12" height="12" class="node" />
-            <rect x="169" y="339" width="12" height="12" class="node" />
-            <rect x="89" y="139" width="12" height="12" class="node" />
+        <section id="branchTree" class="branch-tree hidden" style="left: 5600px; top: 4900px;">
+          <svg class="branch-lines" viewBox="0 0 780 430" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M40 20 L40 220" />
+            <path d="M40 220 L180 140" />
+            <path d="M40 220 L180 310" />
+            <rect x="34" y="214" width="12" height="12" class="node" />
+            <rect x="174" y="134" width="12" height="12" class="node" />
+            <rect x="174" y="304" width="12" height="12" class="node" />
           </svg>
 
-          <section id="servicesWidget" class="widget child-widget services-widget" style="left: 188px; top: 110px;">
+          <section id="servicesWidget" class="widget child-widget services-widget" style="left: 200px; top: 76px;">
             <div class="widget-head">Services</div>
             <ol id="steps" class="steps"></ol>
           </section>
 
-          <section id="logsWidget" class="widget child-widget logs-widget" style="left: 188px; top: 270px;">
+          <section id="logsWidget" class="widget child-widget logs-widget" style="left: 200px; top: 246px;">
             <div class="widget-head">Execution Logs</div>
             <pre id="logs" class="logs">Waiting for pipeline run...</pre>
           </section>

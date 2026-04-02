@@ -11,8 +11,8 @@ let currentRunId = null;
 let pollTimer = null;
 
 const pan = {
-  x: -280,
-  y: -180,
+  x: -4900,
+  y: -4400,
   dragging: false,
   startMouseX: 0,
   startMouseY: 0,
