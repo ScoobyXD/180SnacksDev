@@ -342,6 +342,12 @@ async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId
     // Image attachment — Airtable downloads from this URL
     fields["Image"] = imageUrls.map((url) => ({ url })); // Multiple images in single row supported
 
+    const retailerMarkup = getRetailerMarkup(metadata.retailer);
+    if (retailerMarkup != null && extraction.retail_regular != null) {
+        const soldPrice = extraction.retail_regular * (1 - retailerMarkup);
+        fields["Price Sold To Retailer"] = Number(soldPrice.toFixed(2));
+    }
+
     // Currency note
     if (currencyNote) fields["Notes"] = currencyNote;
 
