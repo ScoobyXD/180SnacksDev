@@ -182,31 +182,77 @@ export async function ensureAirtableTable(config, fieldNames) {
   return { createdTable: true, tableId: created.id };
 }
 
+function formatRejectError(error, rowIndex, row) {
+  return {
+    rowIndex,
+    message: error instanceof Error ? error.message : String(error),
+    row
+  };
+}
+
+async function appendSingleRecord(url, token, row, rowIndex) {
+  try {
+    const result = await airtableRequest(url, {
+      method: 'POST',
+      token,
+      body: {
+        records: [{ fields: row }],
+        typecast: true
+      }
+    });
+    return { ok: true, count: result.records?.length ?? 1 };
+  } catch (error) {
+    return { ok: false, reject: formatRejectError(error, rowIndex, row) };
+  }
+}
+
 export async function appendRowsToAirtable(config, rows) {
   if (!rows.length) {
-    return { appended: 0, batches: 0 };
+    return { appended: 0, batches: 0, rejected: 0, rejects: [] };
   }
 
   const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
   const batches = chunk(rows, BATCH_SIZE);
   let appended = 0;
+  const rejects = [];
 
-  for (const batch of batches) {
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex];
     const records = batch.map((row) => ({ fields: row }));
-    const result = await airtableRequest(url, {
-      method: 'POST',
-      token: config.token,
-      body: {
-        records,
-        typecast: true
-      }
-    });
 
-    appended += result.records?.length ?? records.length;
+    try {
+      const result = await airtableRequest(url, {
+        method: 'POST',
+        token: config.token,
+        body: {
+          records,
+          typecast: true
+        }
+      });
+      appended += result.records?.length ?? records.length;
+      continue;
+    } catch {
+      // Recover from partial-data ambiguity by isolating invalid rows one-by-one.
+      for (let offset = 0; offset < batch.length; offset += 1) {
+        const row = batch[offset];
+        const rowIndex = batchIndex * BATCH_SIZE + offset;
+        // eslint-disable-next-line no-await-in-loop
+        const singleResult = await appendSingleRecord(url, config.token, row, rowIndex);
+
+        if (singleResult.ok) {
+          appended += singleResult.count;
+          continue;
+        }
+
+        rejects.push(singleResult.reject);
+      }
+    }
   }
 
   return {
     appended,
-    batches: batches.length
+    batches: batches.length,
+    rejected: rejects.length,
+    rejects
   };
 }
