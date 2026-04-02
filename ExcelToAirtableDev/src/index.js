@@ -9,9 +9,7 @@ import { detectWeekEndingFromShapesFile } from './weekEnding.js';
 
 const CURRENCY_COLUMNS = new Set([
   'Dollar Sales',
-  'Average Price per Unit',
-  'Average Coupon Value',
-  'Average Promoted Price'
+  'Average Price per Unit'
 ]);
 
 function loadEnvFiles() {

@@ -10,7 +10,7 @@ test('keeps warehouse rows only, carries item+region, and leaves Date blank', ()
     { Item: null, Venue: '      WAREHOUSE 1001 BALTIMORE', 'Dollar Sales': 22, 'Unit Sales': 4 },
     { Item: 'ITEM B', Venue: 'Total US by Region', 'Dollar Sales': 200 },
     { Item: null, Venue: '  Texas' },
-    { Item: null, Venue: '      WAREHOUSE 1697 RICHMOND TX', 'Dollar Sales': -25.78, 'Refund Units': -2 }
+    { Item: null, Venue: '      WAREHOUSE 1697 RICHMOND TX', 'Dollar Sales': -25.78 }
   ];
 
   const out = transformRows(input, { weekEnding: '2026-03-29' });
@@ -20,7 +20,7 @@ test('keeps warehouse rows only, carries item+region, and leaves Date blank', ()
   assert.deepEqual(out.map((r) => r.Region), ['Northeast', 'Northeast', 'Texas']);
   assert.equal(out[0].Date, '');
   assert.equal(out[2]['Dollar Sales'], -25.78);
-  assert.equal(out[2]['Refund Units'], -2);
+  assert.equal(out[2]['Refund Units'], undefined);
 });
 
 
@@ -39,7 +39,7 @@ test('ignores rows until first warehouse and handles numeric strings', () => {
   assert.equal(out[0]['Average Price per Unit'], 11.47);
 });
 
-test('normalizes formatted metric values and placeholder coupon values', () => {
+test('drops removed metrics from normalized output rows', () => {
   const input = [
     { Item: 'ITEM D', Venue: '  West' },
     {
@@ -47,7 +47,9 @@ test('normalizes formatted metric values and placeholder coupon values', () => {
       Venue: 'WAREHOUSE 999 SAMPLE',
       'Average Coupon Value': '$2.40',
       'Average Promoted Price': '(9.59)',
-      'Average Inventory per Day': 'N/A'
+      'Average Inventory per Day': 'N/A',
+      'NSI Units On Hand': '10',
+      'Refund Units': '5'
     },
     {
       Item: null,
@@ -60,9 +62,11 @@ test('normalizes formatted metric values and placeholder coupon values', () => {
   const out = transformRows(input, { weekEnding: '03-29-2026' });
 
   assert.equal(out.length, 2);
-  assert.equal(out[0]['Average Coupon Value'], 2.4);
-  assert.equal(out[0]['Average Promoted Price'], -9.59);
-  assert.equal(out[0]['Average Inventory per Day'], null);
-  assert.equal(out[1]['Average Coupon Value'], null);
-  assert.equal(out[1]['Average Promoted Price'], 9.59);
+  assert.equal(out[0]['Average Coupon Value'], undefined);
+  assert.equal(out[0]['Average Promoted Price'], undefined);
+  assert.equal(out[0]['Average Inventory per Day'], undefined);
+  assert.equal(out[0]['NSI Units On Hand'], undefined);
+  assert.equal(out[0]['Refund Units'], undefined);
+  assert.equal(out[1]['Average Coupon Value'], undefined);
+  assert.equal(out[1]['Average Promoted Price'], undefined);
 });
