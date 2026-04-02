@@ -126,7 +126,7 @@ body {
 .branch-tree {
   position: absolute;
   width: 720px;
-  height: 430px;
+  height: 500px;
 }
 
 .branch-lines {
@@ -137,7 +137,7 @@ body {
 .branch-lines path {
   fill: none;
   stroke: #12161e;
-  stroke-width: 3;
+  stroke-width: 2.5;
   stroke-linecap: square;
   stroke-linejoin: miter;
 }
