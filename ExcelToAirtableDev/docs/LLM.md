@@ -60,6 +60,7 @@ Output workbook columns are exactly:
 - If `AIRTABLE_SYNC_ENABLED=true`, the script can find/create the base, find/create the table, then append normalized rows.
 - If no `--input` is passed, the script auto-selects the newest `.xlsx` in `../IRIDev/artifacts/downloads`.
 - Currency-like output fields include `Dollar Sales`, `Average Price per Unit`, `Average Coupon Value`, and `Average Promoted Price`.
+- If Airtable rejects a row for `INVALID_VALUE_FOR_COLUMN` on a specific field, the uploader retries that row once with the offending field omitted so valid rows are not dropped due to one incompatible column.
 
 ## Out of scope for v0
 - No row-count validation gating yet.

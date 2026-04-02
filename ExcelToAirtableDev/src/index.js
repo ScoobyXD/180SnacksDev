@@ -196,6 +196,13 @@ async function main() {
       normalizedRows
     );
 
+    if (appendResult.recoveredRows > 0) {
+      console.warn(
+        `Recovered ${appendResult.recoveredRows} Airtable rows by omitting invalid fields: ` +
+        `${JSON.stringify(appendResult.recoveredFields)}`
+      );
+    }
+
     if (appendResult.rejected > 0) {
       fs.mkdirSync('artifacts/rejects', { recursive: true });
       const rejectPath = path.join(
