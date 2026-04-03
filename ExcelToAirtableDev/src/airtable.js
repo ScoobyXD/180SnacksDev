@@ -201,10 +201,6 @@ function formatRejectError(error, rowIndex, row) {
   };
 }
 
-function escapeFormulaString(value) {
-  return String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
 function toRecordPayload(row) {
   const payload = { ...row };
   if (payload.Date && typeof payload.Date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.Date)) {
@@ -213,37 +209,16 @@ function toRecordPayload(row) {
   return payload;
 }
 
-async function findRecordIdByRow(config, row) {
-  const item = escapeFormulaString(row.Item);
-  const region = escapeFormulaString(row.Region);
-  const venue = escapeFormulaString(row.Venue);
-  const isoDate = escapeFormulaString(row.Date);
-  const formula = `AND({Item}="${item}",{Region}="${region}",{Venue}="${venue}",DATETIME_FORMAT({Date},"YYYY-MM-DD")="${isoDate}")`;
-  const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
-
-  const result = await airtableRequest(url, { token: config.token });
-  return result.records?.[0]?.id ?? null;
-}
-
-async function createRecord(config, fields) {
-  const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
-  return airtableRequest(url, {
-    method: 'POST',
-    token: config.token,
-    body: {
-      records: [{ fields: toRecordPayload(fields) }],
-      typecast: true
-    }
-  });
-}
-
-async function updateRecord(config, recordId, fields) {
+async function upsertBatch(config, rows) {
   const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
   return airtableRequest(url, {
     method: 'PATCH',
     token: config.token,
     body: {
-      records: [{ id: recordId, fields: toRecordPayload(fields) }],
+      records: rows.map((row) => ({ fields: toRecordPayload(row) })),
+      performUpsert: {
+        fieldsToMergeOn: ['Item', 'Region', 'Venue', 'Date']
+      },
       typecast: true
     }
   });
@@ -268,24 +243,17 @@ export async function upsertRowsToAirtable(config, rows) {
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
-
-    for (let offset = 0; offset < batch.length; offset += 1) {
-      const row = batch[offset];
-      const rowIndex = batchIndex * BATCH_SIZE + offset;
-
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const existingId = await findRecordIdByRow(config, row);
-        if (existingId) {
-          // eslint-disable-next-line no-await-in-loop
-          await updateRecord(config, existingId, row);
-          updated += 1;
-        } else {
-          // eslint-disable-next-line no-await-in-loop
-          await createRecord(config, row);
-          created += 1;
-        }
-      } catch (error) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await upsertBatch(config, batch);
+      const createdInBatch = result.createdRecords?.length ?? 0;
+      const updatedInBatch = result.updatedRecords?.length ?? 0;
+      created += createdInBatch;
+      updated += updatedInBatch;
+    } catch (error) {
+      for (let offset = 0; offset < batch.length; offset += 1) {
+        const row = batch[offset];
+        const rowIndex = batchIndex * BATCH_SIZE + offset;
         rejects.push(formatRejectError(error, rowIndex, row));
       }
     }

@@ -274,6 +274,12 @@ async function main() {
       airtableRows
     );
 
+    if (airtableRows.length > 0 && upsertResult.upserted === 0 && upsertResult.rejected === 0) {
+      throw new Error(
+        `Airtable sync attempted ${airtableRows.length} rows but reported 0 upserted and 0 rejected rows.`
+      );
+    }
+
     if (upsertResult.rejected > 0) {
       fs.mkdirSync('artifacts/rejects', { recursive: true });
       const rejectPath = path.join(

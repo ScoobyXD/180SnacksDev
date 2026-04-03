@@ -2,6 +2,7 @@ const runButton = document.getElementById('runButton');
 const statusText = document.getElementById('statusText');
 const stepsList = document.getElementById('steps');
 const logsEl = document.getElementById('logs');
+const copyLogsButton = document.getElementById('copyLogsButton');
 const clockEl = document.getElementById('clock');
 const branchTree = document.getElementById('branchTree');
 const pipelineGroup = document.getElementById('pipelineGroup');
@@ -11,6 +12,7 @@ const world = document.getElementById('world');
 let currentRunId = null;
 let pollTimer = null;
 let widgetDragPointerId = null;
+let latestRenderedLogsText = '';
 
 const pan = {
   x: -4900,
@@ -68,16 +70,38 @@ function renderSteps(steps = []) {
 
 function renderLogs(logs = []) {
   if (!logs.length) {
-    logsEl.textContent = 'No logs yet.';
+    latestRenderedLogsText = 'No logs yet.';
+    logsEl.textContent = latestRenderedLogsText;
     return;
   }
 
-  logsEl.textContent = logs
+  latestRenderedLogsText = logs
     .slice(-250)
     .map((entry) => `[${entry.at}] [${entry.stepId}] [${entry.level}] ${entry.message}`)
     .join('\n');
+  logsEl.textContent = latestRenderedLogsText;
 
   logsEl.scrollTop = logsEl.scrollHeight;
+}
+
+async function copyLogsToClipboard() {
+  const text = latestRenderedLogsText || logsEl.textContent || '';
+  if (!text) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    const previous = copyLogsButton.textContent;
+    copyLogsButton.textContent = 'Copied';
+    copyLogsButton.disabled = true;
+    setTimeout(() => {
+      copyLogsButton.textContent = previous;
+      copyLogsButton.disabled = false;
+    }, 1200);
+  } catch (error) {
+    setStatus(error instanceof Error ? `Copy failed: ${error.message}` : 'Copy failed');
+  }
 }
 
 async function fetchRun(runId) {
@@ -230,6 +254,7 @@ canvas.addEventListener('wheel', (event) => {
 }, { passive: false });
 
 runButton.addEventListener('click', startRun);
+copyLogsButton.addEventListener('click', copyLogsToClipboard);
 setInterval(tickClock, 1000);
 applyPan();
 tickClock();
