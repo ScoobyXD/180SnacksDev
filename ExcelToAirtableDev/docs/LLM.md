@@ -1,95 +1,98 @@
-# ExcelToAirtableDev — 180 Snacks data normalizer
+# ExcelToAirtableDev — LLM Working Notes
+
+> Source of truth policy: if this doc conflicts with code, **code wins**.
 
 ## Purpose
-This project is a focused transformation tool in the 180 Snacks tool ecosystem.
+ExcelToAirtableDev is the transformation + sync worker.
 
-- **Input:** IRI-style Excel report export (`.xlsx`)
-- **Prototype output:** cleaned/normalized Excel file (`.xlsx`)
-- **Future output:** Airtable upsert
+It owns:
+- Reading raw IRI export XLSX files.
+- Normalizing hierarchical report rows into warehouse-level rows.
+- Validating normalized output.
+- Writing normalized output workbook.
+- Optional Airtable synchronization.
 
-This project intentionally does not own browser automation. IRIDev owns extraction.
+It does **not** own browser extraction. That is `IRIDev`.
 
-## Architecture role (small-tool strategy)
-180 Snacks tooling should stay modular and swappable:
-- `IRIDev`: Playwright extraction from IRI to local files
-- `ExcelToAirtableDev`: data normalization (and later Airtable sync)
-- `ShelfTagDev`: shelf-tag workflow
+## Current input model
+Primary input is an IRI workbook with:
+- A non-data `Index` tab.
+- Daily data tabs (typically `1..7`) where date is embedded in Shape text (e.g., `day ending 03-25-2026`).
 
-No behemoth app. Each tool does one job well.
+If `--input` is omitted, runtime auto-selects newest XLSX from:
+- `../IRIDev/artifacts/downloads`
 
-## Prototype v0 scope (current)
-1. Read a source XLSX dropped into this project.
-2. Parse rows using fixed schema assumptions.
-3. Keep **warehouse rows only**.
-4. Carry-forward hierarchy context so each warehouse row has `Item` and `Region`.
-5. Emit normalized output to a new XLSX file.
+## Date extraction model (current)
+- Date is parsed from worksheet-linked drawing/control XML (not cell values).
+- Per-worksheet date map is built by traversing XLSX internals.
+- Accepted phrases include `day ending` / `week ending` with `MM-DD-YYYY` or `MM/DD/YYYY` variants.
 
-## Canonical output columns
-Output workbook columns are exactly:
+## Current normalization behavior
+For each daily worksheet:
+1. Detect header row containing `Item` and `Venue`.
+2. Parse body rows into key/value records.
+3. Maintain hierarchical context:
+   - carry `currentItem`
+   - carry `currentRegion`
+4. Emit only warehouse rows.
+5. Set `Date` for each emitted row to the sheet-level extracted date.
+6. Merge all daily-sheet rows into one combined output dataset.
+
+Totals and non-warehouse summary rows are dropped.
+
+## Current output schema
+Current output columns:
 1. `Item`
 2. `Region`
 3. `Venue`
-4. `Week Ending Date`
-5. `Date` (must stay blank in current weekly-only workflow)
-6. `Dollar Sales`
-7. `Unit Sales`
-8. `Inventory On Hand`
-9. `Average Price per Unit`
-10. `NSI Units On Hand`
-11. `Refund Units`
-12. `Average Inventory per Day`
-13. `Average Coupon Value`
-14. `Average Promoted Price`
+4. `Date`
+5. `Dollar Sales`
+6. `Unit Sales`
+7. `Inventory On Hand`
+8. `Average Price per Unit`
 
-## Deterministic parsing rules
-- Week ending is detected only from top-of-sheet shape metadata (e.g., `Shape 1`), normalized to `MM-DD-YYYY`, and applied to every output row.
-- Treat `Item` as the key context dimension.
-- Drop totals rows (e.g., `Total US by Region`).
-- Drop non-warehouse summary rows from output.
-- Keep only rows where `Venue` identifies a warehouse.
-- Carry `currentItem` from last non-empty `Item`.
-- Carry `currentRegion` from last region row.
-- Set `Date` to empty string for all rows.
-- Numeric normalization is permissive for metric fields and strips formatting like `$`, `%`, commas, spaces, and accounting parentheses `(123.45)` before parsing.
-- Non-numeric placeholders (e.g., `-`, `N/A`, blank) map to `null` so Airtable numeric/currency fields are not sent invalid text values.
+Notes:
+- `Week Ending Date` is no longer emitted.
+- Numeric normalization tolerates accounting and symbol formatting and maps invalid placeholders to `null`.
 
-- If week ending cannot be detected from Shape 1 metadata, the run fails fast to avoid blank week fields.
+## Validation gates
+Validation runs after output workbook creation and before Airtable sync.
+Run fails if any of these are true:
+- No warehouse rows produced.
+- Any daily worksheet is missing Shape-derived date.
+- Any daily worksheet produced zero warehouse rows.
+- Any output row has blank `Date`.
 
-## Airtable sync (current)
-- Optional Airtable sync is now supported behind environment flags.
-- If `AIRTABLE_SYNC_ENABLED=true`, the script can find/create the base, find/create the table, then append normalized rows.
-- If no `--input` is passed, the script auto-selects the newest `.xlsx` in `../IRIDev/artifacts/downloads`.
-- Currency-like output fields include `Dollar Sales`, `Average Price per Unit`, `Average Coupon Value`, and `Average Promoted Price`.
-- If Airtable rejects a row for `INVALID_VALUE_FOR_COLUMN` on a specific field, the uploader retries that row once with the offending field omitted so valid rows are not dropped due to one incompatible column.
+When validation fails, Airtable sync is blocked.
 
-## Out of scope for v0
-- No row-count validation gating yet.
-- No cross-file backfill tooling yet.
+## Airtable sync model (current)
+Enabled only if `AIRTABLE_SYNC_ENABLED=true`.
 
-## Test fixtures (planning)
-Fixture rows are test-case mini datasets (5–10 representative rows) used to lock behavior:
-- totals row dropped
-- region row context set
-- warehouse row emitted
-- item carry-forward works
-- date is blank
-- negative values preserved
+Behavior:
+- Finds/creates base and table depending on env flags.
+- Ensures schema with `Date` field and `Record Key` field.
+- Converts output date to ISO (`YYYY-MM-DD`) for Airtable date writes.
+- Uses idempotent upsert keyed by:
+  - `Record Key = Item|Region|Venue|Date`
+- If key exists: update record.
+- If key missing: create record.
+- Rejects are written to `artifacts/rejects/*.json` and fail the run.
 
-## CLI contract
-`npm run run -- [--input=<path.xlsx>] [--output=<path.xlsx>]`
+## Runtime contract
+CLI:
+- `npm run run -- [--input=<path.xlsx>] [--output=<path.xlsx>]`
 
-- `--input` optional. If omitted, newest raw IRIDev download is selected automatically.
-- `--output` optional (auto timestamped default)
-- Week ending is not accepted as CLI input; it is sourced from Shape 1 metadata only.
-- Airtable sync is controlled with env vars (see `.env.example`), including smart base/table create options.
-- Runtime automatically loads `.env` / `.env.local` from `ExcelToAirtableDev` before evaluating flags.
+Environment:
+- Reads `.env` and `.env.local` from this project root.
 
-## Success criteria (v0)
-- Given a known input workbook, output workbook is created.
-- Output includes only warehouse rows.
-- Every output row has `Item`, `Region`, `Venue` populated from deterministic rules.
-- `Date` column is blank for all rows.
+Artifacts:
+- Normalized workbook in `artifacts/`
+- Reject logs in `artifacts/rejects/` (if Airtable rejects rows)
+- Metrics-style JSON emitted to stdout
 
-
-## Dependency note
-- Runtime XLSX handling uses `exceljs` in order to avoid the unresolved high-severity advisory currently affecting the `xlsx` package in this workflow.
+## Near-term roadmap
+1. Add automated fixture-based tests for per-sheet shape date extraction.
+2. Add schema drift detection/reporting when report headers change.
+3. Add explicit per-sheet row-count expectations and alert thresholds.
+4. Add replay mode for previously downloaded runs.
+5. Introduce richer canonical schema fields once business mapping expands.
