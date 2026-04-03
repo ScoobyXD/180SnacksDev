@@ -66,8 +66,8 @@ function createRun() {
     ],
     cleanup: {
       enabled: true,
-      keepLatestDownloads: 0,
-      keepLatestOutputs: 0,
+      keepLatestDownloads: 1,
+      keepLatestOutputs: 1,
       removed: []
     },
     logs: []
@@ -162,6 +162,10 @@ function cleanupOldFiles(directoryPath, matcher, keepLatest) {
 
 function cleanupArtifacts(run) {
   if (!run.cleanup.enabled) {
+    return;
+  }
+  if (run.status === 'failed') {
+    appendLog(run, 'cleanup', 'info', 'Cleanup skipped because run failed (preserving artifacts for debugging).');
     return;
   }
 

@@ -52,7 +52,15 @@ function inferField(name) {
   }
 
   if (name === 'Date') {
-    return { name, type: 'date' };
+    return {
+      name,
+      type: 'date',
+      options: {
+        dateFormat: {
+          name: 'iso'
+        }
+      }
+    };
   }
 
   if (CURRENCY_FIELDS.has(name)) {
