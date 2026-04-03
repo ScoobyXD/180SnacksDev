@@ -73,11 +73,12 @@ Behavior:
 - Ensures schema includes normalized output fields (including `Date`).
 - Converts output date to ISO (`YYYY-MM-DD`) for Airtable date writes.
 - Uses Airtable batch upsert (`performUpsert`) keyed by natural composite fields:
-  - `Item + Region + Venue + Date`
+  - `Item + Venue + Date` (Airtable upsert merge keys support at most 3 fields)
 - If merge fields match: update record.
 - If merge fields do not match: create record.
 - Fails run if Airtable reports a silent zero-write (`0 upserted` and `0 rejected`) when rows were attempted.
 - Rejects are written to `artifacts/rejects/*.json` and fail the run.
+- Emits progress logs during Airtable writes (batch 1, every 50th batch, and final batch).
 
 ## Runtime contract
 CLI:

@@ -269,6 +269,10 @@ async function main() {
     );
 
     const airtableRows = prepareAirtableRows(normalizedRows);
+    console.log(
+      `[airtable] Starting sync of ${airtableRows.length} rows to ` +
+      `${airtableConfig.tableName} in base ${ensured.baseId}.`
+    );
     const upsertResult = await upsertRowsToAirtable(
       { ...airtableConfig, baseId: ensured.baseId },
       airtableRows

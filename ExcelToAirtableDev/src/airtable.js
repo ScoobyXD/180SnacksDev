@@ -1,6 +1,7 @@
 import process from 'node:process';
 
 const BATCH_SIZE = 10;
+const UPSERT_MERGE_FIELDS = ['Item', 'Venue', 'Date'];
 const CURRENCY_FIELDS = new Set([
   'Dollar Sales',
   'Average Price per Unit'
@@ -217,7 +218,7 @@ async function upsertBatch(config, rows) {
     body: {
       records: rows.map((row) => ({ fields: toRecordPayload(row) })),
       performUpsert: {
-        fieldsToMergeOn: ['Item', 'Region', 'Venue', 'Date']
+        fieldsToMergeOn: UPSERT_MERGE_FIELDS
       },
       typecast: true
     }
@@ -243,6 +244,7 @@ export async function upsertRowsToAirtable(config, rows) {
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
+    const batchNumber = batchIndex + 1;
     try {
       // eslint-disable-next-line no-await-in-loop
       const result = await upsertBatch(config, batch);
@@ -250,7 +252,18 @@ export async function upsertRowsToAirtable(config, rows) {
       const updatedInBatch = result.updatedRecords?.length ?? 0;
       created += createdInBatch;
       updated += updatedInBatch;
+
+      if (batchNumber === 1 || batchNumber % 50 === 0 || batchNumber === batches.length) {
+        console.log(
+          `[airtable] Upserted batch ${batchNumber}/${batches.length} ` +
+          `(created ${createdInBatch}, updated ${updatedInBatch}).`
+        );
+      }
     } catch (error) {
+      console.error(
+        `[airtable] Failed batch ${batchNumber}/${batches.length}: ` +
+        `${error instanceof Error ? error.message : String(error)}`
+      );
       for (let offset = 0; offset < batch.length; offset += 1) {
         const row = batch[offset];
         const rowIndex = batchIndex * BATCH_SIZE + offset;
