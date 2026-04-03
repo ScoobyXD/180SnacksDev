@@ -118,15 +118,32 @@ async function captureDownloadFromContext(
 }
 
 async function clickExportFromInbox(page: Page): Promise<void> {
-  const exportTitle = page.locator('#inbox').getByText('(BP226) US Costco Small');
-  const exportExcelIcon = exportTitle.locator('xpath=following::img[contains(@src, "xlsx") or contains(@src, "xls")][1]');
+  const inbox = page.locator('#inbox:visible');
+  await inbox.waitFor({ state: 'visible', timeout: 20_000 });
+
+  const exportTitle = inbox
+    .locator('p.np-contentHdr[title*="(BP226) US Costco Small"]')
+    .first();
+  await exportTitle.scrollIntoViewIfNeeded();
+  await exportTitle.waitFor({ state: 'visible', timeout: 20_000 });
+
+  const exportRow = exportTitle.locator('xpath=ancestor::*[contains(@class,"report") or contains(@class,"message")][1]');
+  const exportExcelIcon = exportRow.locator('img[src*="xls"], img[src*="xlsx"]');
 
   if ((await exportExcelIcon.count()) > 0) {
     await exportExcelIcon.first().click();
     return;
   }
 
-  await exportTitle.first().click();
+  await exportTitle.click();
+}
+
+async function clickVisibleMoreExport(page: Page): Promise<void> {
+  await page.locator('a:visible').filter({ hasText: /^More$/ }).first().click();
+
+  const exportMenu = page.locator('#SBMore-listUI:visible');
+  await exportMenu.waitFor({ state: 'visible', timeout: 10_000 });
+  await exportMenu.getByText('Export', { exact: true }).first().click();
 }
 
 async function main(): Promise<void> {
@@ -149,8 +166,7 @@ async function main(): Promise<void> {
     await page.locator('.fa.fa-grid-round').click();
     await page.getByText('Library').click();
     await page.getByText('(BP226) US Costco Small Vendor Report_PREMIUM', { exact: true }).click();
-    await page.locator('a').filter({ hasText: /^More$/ }).click();
-    await page.locator('#SBMore-listUI').getByText('Export').click();
+    await clickVisibleMoreExport(page);
     await page.getByText('week ending 03-29-2026').click();
     await page.locator('#btnexport').click();
     await page.locator('#export-form').getByText('OK').click();

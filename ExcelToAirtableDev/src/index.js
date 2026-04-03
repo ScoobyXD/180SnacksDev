@@ -3,9 +3,14 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import ExcelJS from 'exceljs';
-import { appendRowsToAirtable, ensureAirtableBaseAndTable, getAirtableConfig } from './airtable.js';
+import {
+  RECORD_KEY_FIELD,
+  ensureAirtableBaseAndTable,
+  getAirtableConfig,
+  upsertRowsToAirtable
+} from './airtable.js';
 import { getOutputColumns, transformRows } from './transform.js';
-import { detectWeekEndingFromShapesFile } from './weekEnding.js';
+import { detectReportDatesByWorksheet, mmddyyyyToIsoDate } from './weekEnding.js';
 
 const CURRENCY_COLUMNS = new Set([
   'Dollar Sales',
@@ -93,18 +98,26 @@ function detectHeaderRow(rowArrays) {
       return i;
     }
   }
-  return 0;
+  return -1;
 }
 
-async function loadInputRows(inputPath) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(inputPath);
+function getDataWorksheets(workbook) {
+  return workbook.worksheets.filter((worksheet, index) => {
+    const name = String(worksheet.name ?? '').trim().toLowerCase();
+    if (name === 'index') {
+      return false;
+    }
 
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) {
-    throw new Error('Workbook has no worksheets.');
-  }
+    // Expected layout: first tab is index, next tabs are daily tabs.
+    if (index === 0 && name !== '1') {
+      return false;
+    }
 
+    return true;
+  });
+}
+
+function buildRowArrays(worksheet) {
   const rowArrays = [];
   for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
     const row = worksheet.getRow(rowNumber);
@@ -114,22 +127,49 @@ async function loadInputRows(inputPath) {
     }
     rowArrays.push(values);
   }
+  return rowArrays;
+}
 
-  const headerRowIndex = detectHeaderRow(rowArrays);
-  const detectedWeekEnding = await detectWeekEndingFromShapesFile(inputPath);
-  const headers = (rowArrays[headerRowIndex] || []).map((value) => String(value ?? '').trim());
-  const bodyRows = rowArrays.slice(headerRowIndex + 1);
+async function loadInputRows(inputPath) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(inputPath);
 
-  const rows = bodyRows.map((row) => {
-    const record = {};
-    for (let i = 0; i < headers.length; i += 1) {
-      const key = headers[i] || `Column_${i + 1}`;
-      record[key] = row[i] ?? null;
+  const reportDateBySheet = await detectReportDatesByWorksheet(inputPath);
+  const dataWorksheets = getDataWorksheets(workbook);
+
+  if (!dataWorksheets.length) {
+    throw new Error('Workbook has no daily worksheets to process.');
+  }
+
+  const perSheet = [];
+  for (const worksheet of dataWorksheets) {
+    const rowArrays = buildRowArrays(worksheet);
+    const headerRowIndex = detectHeaderRow(rowArrays);
+    if (headerRowIndex < 0) {
+      throw new Error(`Could not find Item/Venue header row in worksheet "${worksheet.name}".`);
     }
-    return record;
-  });
 
-  return { rows, detectedWeekEnding };
+    const reportDate = reportDateBySheet.get(worksheet.name) ?? '';
+    const headers = (rowArrays[headerRowIndex] || []).map((value) => String(value ?? '').trim());
+    const bodyRows = rowArrays.slice(headerRowIndex + 1);
+
+    const rows = bodyRows.map((row) => {
+      const record = {};
+      for (let i = 0; i < headers.length; i += 1) {
+        const key = headers[i] || `Column_${i + 1}`;
+        record[key] = row[i] ?? null;
+      }
+      return record;
+    });
+
+    perSheet.push({
+      sheetName: worksheet.name,
+      reportDate,
+      rows
+    });
+  }
+
+  return perSheet;
 }
 
 function defaultOutputPath(inputPath) {
@@ -168,50 +208,89 @@ async function saveOutputWorkbook(records, outputPath) {
   await workbook.xlsx.writeFile(outputPath);
 }
 
+function buildRecordKey(row) {
+  return [row.Item, row.Region, row.Venue, row.Date].map((value) => String(value ?? '').trim()).join('|');
+}
+
+function prepareAirtableRows(rows) {
+  return rows.map((row) => ({
+    ...row,
+    Date: mmddyyyyToIsoDate(row.Date),
+    [RECORD_KEY_FIELD]: buildRecordKey(row)
+  }));
+}
+
+function validateNormalizedRows(rows, perSheetSummaries) {
+  if (!rows.length) {
+    throw new Error('No warehouse rows were produced in normalized output.');
+  }
+
+  for (const summary of perSheetSummaries) {
+    if (!summary.reportDate) {
+      throw new Error(`Missing day-ending date from Shape 1 for worksheet "${summary.sheetName}".`);
+    }
+
+    if (summary.outputCount <= 0) {
+      throw new Error(`Worksheet "${summary.sheetName}" produced zero warehouse rows.`);
+    }
+  }
+
+  const missingDateCount = rows.filter((row) => !String(row.Date ?? '').trim()).length;
+  if (missingDateCount > 0) {
+    throw new Error(`Validation failed: ${missingDateCount} output rows are missing Date values.`);
+  }
+}
+
 async function main() {
   loadEnvFiles();
   const inputPath = resolveInputPath();
   const outputPath = getArg('output') ?? defaultOutputPath(inputPath);
 
-  const { rows: inputRows, detectedWeekEnding } = await loadInputRows(inputPath);
-  const weekEnding = detectedWeekEnding;
+  const perSheetRows = await loadInputRows(inputPath);
+  const perSheetSummaries = [];
+  const normalizedRows = [];
 
-  if (!weekEnding) {
-    throw new Error('Could not detect a week ending date from Shape 1 metadata in the input sheet.');
+  for (const sheetData of perSheetRows) {
+    const transformed = transformRows(sheetData.rows, { reportDate: sheetData.reportDate });
+    normalizedRows.push(...transformed);
+    perSheetSummaries.push({
+      sheetName: sheetData.sheetName,
+      reportDate: sheetData.reportDate,
+      inputCount: sheetData.rows.length,
+      outputCount: transformed.length
+    });
   }
 
-  const normalizedRows = transformRows(inputRows, { weekEnding });
   await saveOutputWorkbook(normalizedRows, outputPath);
+  validateNormalizedRows(normalizedRows, perSheetSummaries);
 
   const airtableConfig = getAirtableConfig();
   let airtable = { enabled: false };
 
   if (airtableConfig.enabled) {
     const outputColumns = getOutputColumns();
-    const ensured = await ensureAirtableBaseAndTable(airtableConfig, outputColumns);
-    const appendResult = await appendRowsToAirtable(
-      { ...airtableConfig, baseId: ensured.baseId },
-      normalizedRows
+    const ensured = await ensureAirtableBaseAndTable(
+      airtableConfig,
+      [...outputColumns, RECORD_KEY_FIELD]
     );
 
-    if (appendResult.recoveredRows > 0) {
-      console.warn(
-        `Recovered ${appendResult.recoveredRows} Airtable rows by omitting invalid fields: ` +
-        `${JSON.stringify(appendResult.recoveredFields)}`
-      );
-    }
+    const airtableRows = prepareAirtableRows(normalizedRows);
+    const upsertResult = await upsertRowsToAirtable(
+      { ...airtableConfig, baseId: ensured.baseId },
+      airtableRows
+    );
 
-    if (appendResult.rejected > 0) {
+    if (upsertResult.rejected > 0) {
       fs.mkdirSync('artifacts/rejects', { recursive: true });
       const rejectPath = path.join(
         'artifacts',
         'rejects',
         `${new Date().toISOString().replace(/[:.]/g, '-')}-airtable-rejects.json`
       );
-      fs.writeFileSync(rejectPath, JSON.stringify(appendResult.rejects, null, 2), 'utf8');
+      fs.writeFileSync(rejectPath, JSON.stringify(upsertResult.rejects, null, 2), 'utf8');
       throw new Error(
-        `Airtable accepted ${appendResult.appended} rows but rejected ${appendResult.rejected} rows. ` +
-        `Reject details saved to ${rejectPath}. First reject: ${appendResult.rejects[0]?.message ?? 'unknown error'}`
+        `Airtable upserted ${upsertResult.upserted} rows but rejected ${upsertResult.rejected} rows. ` +
+        `Reject details saved to ${rejectPath}. First reject: ${upsertResult.rejects[0]?.message ?? 'unknown error'}`
       );
     }
 
@@ -220,18 +299,17 @@ async function main() {
       baseId: ensured.baseId,
       tableName: airtableConfig.tableName,
       ...ensured,
-      ...appendResult
+      ...upsertResult
     };
   }
 
   console.log(JSON.stringify({
     inputPath,
     outputPath,
-    inputRowCount: inputRows.length,
+    inputSheetCount: perSheetRows.length,
     outputRowCount: normalizedRows.length,
-    weekEnding,
-    weekEndingSource: 'detected-from-sheet-shape',
-    note: 'Date column intentionally left blank.',
+    perSheetSummaries,
+    note: 'Output workbook was created before validation; Airtable sync is blocked on validation failures.',
     airtable
   }, null, 2));
 }
