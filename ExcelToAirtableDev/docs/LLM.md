@@ -70,10 +70,10 @@ Enabled only if `AIRTABLE_SYNC_ENABLED=true`.
 
 Behavior:
 - Finds/creates base and table depending on env flags.
-- Ensures schema with `Date` field and `Record Key` field.
+- Ensures schema includes normalized output fields (including `Date`).
 - Converts output date to ISO (`YYYY-MM-DD`) for Airtable date writes.
-- Uses idempotent upsert keyed by:
-  - `Record Key = Item|Region|Venue|Date`
+- Uses idempotent upsert keyed by natural composite match:
+  - `Item + Region + Venue + Date`
 - If key exists: update record.
 - If key missing: create record.
 - Rejects are written to `artifacts/rejects/*.json` and fail the run.
