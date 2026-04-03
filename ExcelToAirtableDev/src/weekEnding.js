@@ -94,15 +94,27 @@ function getSheetNameToPath(zip) {
   const workbookRelsTextPromise = workbookRelsXml.async('string');
 
   return Promise.all([workbookTextPromise, workbookRelsTextPromise]).then(([workbookText, workbookRelsText]) => {
-    const sheetRegex = /<sheet\b[^>]*\bname="([^"]+)"[^>]*\br:id="([^"]+)"[^>]*\/?>(?:<\/sheet>)?/gi;
-    for (const match of workbookText.matchAll(sheetRegex)) {
-      sheets.push({ name: decodeXmlEntities(match[1]), relId: match[2] });
+    const sheetTagRegex = /<sheet\b[^>]*\/?>/gi;
+    for (const tagMatch of workbookText.matchAll(sheetTagRegex)) {
+      const tag = tagMatch[0] ?? '';
+      const name = tag.match(/\bname="([^"]+)"/i)?.[1] ?? '';
+      const relId = tag.match(/\br:id="([^"]+)"/i)?.[1] ?? '';
+      if (!name || !relId) {
+        continue;
+      }
+      sheets.push({ name: decodeXmlEntities(name), relId });
     }
 
     const relMap = new Map();
-    const relRegex = /<Relationship\b[^>]*\bId="([^"]+)"[^>]*\bTarget="([^"]+)"[^>]*\/?>(?:<\/Relationship>)?/gi;
-    for (const match of workbookRelsText.matchAll(relRegex)) {
-      relMap.set(match[1], normalizeZipPath(resolveZipPath('xl/workbook.xml', match[2])));
+    const relTagRegex = /<Relationship\b[^>]*\/?>/gi;
+    for (const tagMatch of workbookRelsText.matchAll(relTagRegex)) {
+      const tag = tagMatch[0] ?? '';
+      const id = tag.match(/\bId="([^"]+)"/i)?.[1] ?? '';
+      const target = tag.match(/\bTarget="([^"]+)"/i)?.[1] ?? '';
+      if (!id || !target) {
+        continue;
+      }
+      relMap.set(id, normalizeZipPath(resolveZipPath('xl/workbook.xml', target)));
     }
 
     const output = new Map();
@@ -127,21 +139,25 @@ function findDrawingTargetsForSheet(zip, sheetPath) {
 
   return relFile.async('string').then((relsXml) => {
     const targets = [];
-    const relRegex = /<Relationship\b[^>]*\bType="([^"]+)"[^>]*\bTarget="([^"]+)"[^>]*\/?>(?:<\/Relationship>)?/gi;
+    const relTagRegex = /<Relationship\b[^>]*\/?>/gi;
 
-    for (const match of relsXml.matchAll(relRegex)) {
-      const relType = match[1] ?? '';
-      const target = match[2] ?? '';
+    for (const tagMatch of relsXml.matchAll(relTagRegex)) {
+      const tag = tagMatch[0] ?? '';
+      const relType = tag.match(/\bType="([^"]+)"/i)?.[1] ?? '';
+      const target = tag.match(/\bTarget="([^"]+)"/i)?.[1] ?? '';
       if (!target || !relType) {
         continue;
       }
 
       if (
         relType.includes('/drawing') ||
+        relType.includes('/legacyDrawing') ||
         relType.includes('/vmlDrawing') ||
         relType.includes('/control')
       ) {
-        const resolved = normalizeZipPath(resolveZipPath(worksheetRelsPath, target));
+        // Relationship targets in *.rels are resolved relative to the owning part
+        // (the worksheet XML), not relative to the _rels folder path.
+        const resolved = normalizeZipPath(resolveZipPath(sheetPath, target));
         targets.push(resolved);
       }
     }
