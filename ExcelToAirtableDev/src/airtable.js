@@ -1,7 +1,6 @@
 import process from 'node:process';
 
 const BATCH_SIZE = 10;
-export const RECORD_KEY_FIELD = 'Record Key';
 const CURRENCY_FIELDS = new Set([
   'Dollar Sales',
   'Average Price per Unit'
@@ -47,10 +46,6 @@ async function airtableRequest(url, { method = 'GET', body, token }) {
 }
 
 function inferField(name) {
-  if (name === RECORD_KEY_FIELD) {
-    return { name, type: 'singleLineText' };
-  }
-
   if (name === 'Date') {
     return {
       name,
@@ -218,8 +213,12 @@ function toRecordPayload(row) {
   return payload;
 }
 
-async function findRecordIdByKey(config, keyValue) {
-  const formula = `{${RECORD_KEY_FIELD}}="${escapeFormulaString(keyValue)}"`;
+async function findRecordIdByRow(config, row) {
+  const item = escapeFormulaString(row.Item);
+  const region = escapeFormulaString(row.Region);
+  const venue = escapeFormulaString(row.Venue);
+  const isoDate = escapeFormulaString(row.Date);
+  const formula = `AND({Item}="${item}",{Region}="${region}",{Venue}="${venue}",DATETIME_FORMAT({Date},"YYYY-MM-DD")="${isoDate}")`;
   const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
 
   const result = await airtableRequest(url, { token: config.token });
@@ -274,15 +273,9 @@ export async function upsertRowsToAirtable(config, rows) {
       const row = batch[offset];
       const rowIndex = batchIndex * BATCH_SIZE + offset;
 
-      const keyValue = row[RECORD_KEY_FIELD];
-      if (!keyValue) {
-        rejects.push(formatRejectError(new Error(`Missing ${RECORD_KEY_FIELD}`), rowIndex, row));
-        continue;
-      }
-
       try {
         // eslint-disable-next-line no-await-in-loop
-        const existingId = await findRecordIdByKey(config, keyValue);
+        const existingId = await findRecordIdByRow(config, row);
         if (existingId) {
           // eslint-disable-next-line no-await-in-loop
           await updateRecord(config, existingId, row);
