@@ -13,6 +13,7 @@ import { installReadOnlyNetworkGuard } from './readOnlyGuard.js';
 
 const iriUrl = 'https://advantage.iriworldwide.com/unify-CRX/plus/landing/0';
 const authStatePath = path.join('playwright', '.auth', 'iri.json');
+const reportTitle = '(BP226) US Costco Small Vendor Report_PREMIUM_Copy DAILY VERSION';
 
 function getMode(): ExtractionMode {
   const modeArg = process.argv.find((arg) => arg.startsWith('--mode='));
@@ -118,15 +119,32 @@ async function captureDownloadFromContext(
 }
 
 async function clickExportFromInbox(page: Page): Promise<void> {
-  const exportTitle = page.locator('#inbox').getByText('(BP226) US Costco Small');
-  const exportExcelIcon = exportTitle.locator('xpath=following::img[contains(@src, "xlsx") or contains(@src, "xls")][1]');
+  const inbox = page.locator('#inbox:visible');
+  await inbox.waitFor({ state: 'visible', timeout: 20_000 });
+
+  const exportTitle = inbox
+    .locator(`p.np-contentHdr[title*="${reportTitle}"]`)
+    .first();
+  await exportTitle.scrollIntoViewIfNeeded();
+  await exportTitle.waitFor({ state: 'visible', timeout: 20_000 });
+
+  const exportRow = exportTitle.locator('xpath=ancestor::*[contains(@class,"report") or contains(@class,"message")][1]');
+  const exportExcelIcon = exportRow.locator('img[src*="xls"], img[src*="xlsx"]');
 
   if ((await exportExcelIcon.count()) > 0) {
     await exportExcelIcon.first().click();
     return;
   }
 
-  await exportTitle.first().click();
+  await exportTitle.click();
+}
+
+async function clickVisibleMoreExport(page: Page): Promise<void> {
+  await page.locator('a:visible').filter({ hasText: /^More$/ }).first().click();
+
+  const exportMenu = page.locator('#SBMore-listUI:visible');
+  await exportMenu.waitFor({ state: 'visible', timeout: 10_000 });
+  await exportMenu.getByText('Export', { exact: true }).first().click();
 }
 
 async function main(): Promise<void> {
@@ -146,15 +164,14 @@ async function main(): Promise<void> {
   try {
     await page.goto(iriUrl, { waitUntil: 'domcontentloaded' });
     await page.goto('https://advantage.iriworldwide.com/unify-CRX/plus/landing/0');
-    await page.locator('.fa.fa-grid-round').click();
-    await page.getByText('Library').click();
-    await page.getByText('(BP226) US Costco Small Vendor Report_PREMIUM', { exact: true }).click();
-    await page.locator('a').filter({ hasText: /^More$/ }).click();
-    await page.locator('#SBMore-listUI').getByText('Export').click();
-    await page.getByText('week ending 03-29-2026').click();
-    await page.locator('#btnexport').click();
-    await page.locator('#export-form').getByText('OK').click();
-    await page.locator('#user div').filter({ hasText: /^1$/ }).click();
+    await page.locator('.fa.fa-grid-round:visible').first().click();
+    await page.getByText('Library', { exact: true }).first().click();
+    await page.getByText(reportTitle, { exact: true }).first().click();
+    await clickVisibleMoreExport(page);
+    await page.locator('#iterate:visible').getByText('Select All', { exact: true }).first().click();
+    await page.locator('#btnexport:visible').first().click();
+    await page.locator('#export-form:visible').getByText('OK', { exact: true }).first().click();
+    await page.locator('#user div:visible').filter({ hasText: /^1$/ }).first().click();
 
     // In strict mode, only GET/HEAD/OPTIONS requests are allowed unless allowlisted.
     installReadOnlyNetworkGuard(page, [

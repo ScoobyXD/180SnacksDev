@@ -1,6 +1,7 @@
 import process from 'node:process';
 
 const BATCH_SIZE = 10;
+export const RECORD_KEY_FIELD = 'Record Key';
 const CURRENCY_FIELDS = new Set([
   'Dollar Sales',
   'Average Price per Unit'
@@ -46,8 +47,20 @@ async function airtableRequest(url, { method = 'GET', body, token }) {
 }
 
 function inferField(name) {
-  if (name === 'Date' || name.includes('Week Ending')) {
+  if (name === RECORD_KEY_FIELD) {
     return { name, type: 'singleLineText' };
+  }
+
+  if (name === 'Date') {
+    return {
+      name,
+      type: 'date',
+      options: {
+        dateFormat: {
+          name: 'iso'
+        }
+      }
+    };
   }
 
   if (CURRENCY_FIELDS.has(name)) {
@@ -193,107 +206,104 @@ function formatRejectError(error, rowIndex, row) {
   };
 }
 
-function extractInvalidFieldName(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  const match = message.match(/Field "([^"]+)" cannot accept the provided value/i);
-  return match?.[1] ?? null;
+function escapeFormulaString(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-async function appendSingleRecord(url, token, row, rowIndex) {
-  try {
-    const result = await airtableRequest(url, {
-      method: 'POST',
-      token,
-      body: {
-        records: [{ fields: row }],
-        typecast: true
-      }
-    });
-    return { ok: true, count: result.records?.length ?? 1, recoveredField: null };
-  } catch (error) {
-    const invalidField = extractInvalidFieldName(error);
-    if (invalidField && Object.hasOwn(row, invalidField)) {
-      const patchedRow = { ...row };
-      delete patchedRow[invalidField];
-
-      try {
-        const retryResult = await airtableRequest(url, {
-          method: 'POST',
-          token,
-          body: {
-            records: [{ fields: patchedRow }],
-            typecast: true
-          }
-        });
-        return {
-          ok: true,
-          count: retryResult.records?.length ?? 1,
-          recoveredField: invalidField
-        };
-      } catch (retryError) {
-        return { ok: false, reject: formatRejectError(retryError, rowIndex, row) };
-      }
-    }
-
-    return { ok: false, reject: formatRejectError(error, rowIndex, row) };
+function toRecordPayload(row) {
+  const payload = { ...row };
+  if (payload.Date && typeof payload.Date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.Date)) {
+    return payload;
   }
+  return payload;
 }
 
-export async function appendRowsToAirtable(config, rows) {
-  if (!rows.length) {
-    return { appended: 0, batches: 0, rejected: 0, rejects: [], recoveredRows: 0, recoveredFields: {} };
-  }
+async function findRecordIdByKey(config, keyValue) {
+  const formula = `{${RECORD_KEY_FIELD}}="${escapeFormulaString(keyValue)}"`;
+  const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
 
+  const result = await airtableRequest(url, { token: config.token });
+  return result.records?.[0]?.id ?? null;
+}
+
+async function createRecord(config, fields) {
   const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
+  return airtableRequest(url, {
+    method: 'POST',
+    token: config.token,
+    body: {
+      records: [{ fields: toRecordPayload(fields) }],
+      typecast: true
+    }
+  });
+}
+
+async function updateRecord(config, recordId, fields) {
+  const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
+  return airtableRequest(url, {
+    method: 'PATCH',
+    token: config.token,
+    body: {
+      records: [{ id: recordId, fields: toRecordPayload(fields) }],
+      typecast: true
+    }
+  });
+}
+
+export async function upsertRowsToAirtable(config, rows) {
+  if (!rows.length) {
+    return {
+      upserted: 0,
+      created: 0,
+      updated: 0,
+      batches: 0,
+      rejected: 0,
+      rejects: []
+    };
+  }
+
   const batches = chunk(rows, BATCH_SIZE);
-  let appended = 0;
   const rejects = [];
-  let recoveredRows = 0;
-  const recoveredFields = {};
+  let created = 0;
+  let updated = 0;
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
-    const records = batch.map((row) => ({ fields: row }));
 
-    try {
-      const result = await airtableRequest(url, {
-        method: 'POST',
-        token: config.token,
-        body: {
-          records,
-          typecast: true
-        }
-      });
-      appended += result.records?.length ?? records.length;
-      continue;
-    } catch {
-      // Recover from partial-data ambiguity by isolating invalid rows one-by-one.
-      for (let offset = 0; offset < batch.length; offset += 1) {
-        const row = batch[offset];
-        const rowIndex = batchIndex * BATCH_SIZE + offset;
+    for (let offset = 0; offset < batch.length; offset += 1) {
+      const row = batch[offset];
+      const rowIndex = batchIndex * BATCH_SIZE + offset;
+
+      const keyValue = row[RECORD_KEY_FIELD];
+      if (!keyValue) {
+        rejects.push(formatRejectError(new Error(`Missing ${RECORD_KEY_FIELD}`), rowIndex, row));
+        continue;
+      }
+
+      try {
         // eslint-disable-next-line no-await-in-loop
-        const singleResult = await appendSingleRecord(url, config.token, row, rowIndex);
-
-        if (singleResult.ok) {
-          appended += singleResult.count;
-          if (singleResult.recoveredField) {
-            recoveredRows += 1;
-            recoveredFields[singleResult.recoveredField] = (recoveredFields[singleResult.recoveredField] ?? 0) + 1;
-          }
-          continue;
+        const existingId = await findRecordIdByKey(config, keyValue);
+        if (existingId) {
+          // eslint-disable-next-line no-await-in-loop
+          await updateRecord(config, existingId, row);
+          updated += 1;
+        } else {
+          // eslint-disable-next-line no-await-in-loop
+          await createRecord(config, row);
+          created += 1;
         }
-
-        rejects.push(singleResult.reject);
+      } catch (error) {
+        rejects.push(formatRejectError(error, rowIndex, row));
       }
     }
   }
 
   return {
-    appended,
+    upserted: created + updated,
+    created,
+    updated,
     batches: batches.length,
     rejected: rejects.length,
-    rejects,
-    recoveredRows,
-    recoveredFields
+    rejects
   };
 }
