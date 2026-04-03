@@ -2,7 +2,6 @@ const OUTPUT_COLUMNS = [
   'Item',
   'Region',
   'Venue',
-  'Week Ending Date',
   'Date',
   'Dollar Sales',
   'Unit Sales',
@@ -68,7 +67,7 @@ function isRegionRow(venueRaw) {
   return true;
 }
 
-export function transformRows(inputRows, { weekEnding = '' } = {}) {
+export function transformRows(inputRows, { reportDate = '' } = {}) {
   const output = [];
   let currentItem = '';
   let currentRegion = '';
@@ -98,8 +97,7 @@ export function transformRows(inputRows, { weekEnding = '' } = {}) {
       Item: currentItem,
       Region: currentRegion,
       Venue: asCleanString(venueValue),
-      'Week Ending Date': weekEnding,
-      Date: '',
+      Date: reportDate,
       'Dollar Sales': null,
       'Unit Sales': null,
       'Inventory On Hand': null,
