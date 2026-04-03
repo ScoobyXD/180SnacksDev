@@ -4,7 +4,6 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import ExcelJS from 'exceljs';
 import {
-  RECORD_KEY_FIELD,
   ensureAirtableBaseAndTable,
   getAirtableConfig,
   upsertRowsToAirtable
@@ -208,15 +207,10 @@ async function saveOutputWorkbook(records, outputPath) {
   await workbook.xlsx.writeFile(outputPath);
 }
 
-function buildRecordKey(row) {
-  return [row.Item, row.Region, row.Venue, row.Date].map((value) => String(value ?? '').trim()).join('|');
-}
-
 function prepareAirtableRows(rows) {
   return rows.map((row) => ({
     ...row,
-    Date: mmddyyyyToIsoDate(row.Date),
-    [RECORD_KEY_FIELD]: buildRecordKey(row)
+    Date: mmddyyyyToIsoDate(row.Date)
   }));
 }
 
@@ -271,14 +265,24 @@ async function main() {
     const outputColumns = getOutputColumns();
     const ensured = await ensureAirtableBaseAndTable(
       airtableConfig,
-      [...outputColumns, RECORD_KEY_FIELD]
+      outputColumns
     );
 
     const airtableRows = prepareAirtableRows(normalizedRows);
+    console.log(
+      `[airtable] Starting sync of ${airtableRows.length} rows to ` +
+      `${airtableConfig.tableName} in base ${ensured.baseId}.`
+    );
     const upsertResult = await upsertRowsToAirtable(
       { ...airtableConfig, baseId: ensured.baseId },
       airtableRows
     );
+
+    if (airtableRows.length > 0 && upsertResult.upserted === 0 && upsertResult.rejected === 0) {
+      throw new Error(
+        `Airtable sync attempted ${airtableRows.length} rows but reported 0 upserted and 0 rejected rows.`
+      );
+    }
 
     if (upsertResult.rejected > 0) {
       fs.mkdirSync('artifacts/rejects', { recursive: true });

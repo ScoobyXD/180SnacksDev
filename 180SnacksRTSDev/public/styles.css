@@ -99,6 +99,31 @@ body {
   letter-spacing: 0.08em;
 }
 
+.logs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mini-btn {
+  border: 1px solid rgba(16, 19, 24, 0.35);
+  background: #fff;
+  color: #101318;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.mini-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .core-widget {
   width: 420px;
   padding: 0 14px 14px;
