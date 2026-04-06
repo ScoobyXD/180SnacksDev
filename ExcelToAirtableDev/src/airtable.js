@@ -256,7 +256,8 @@ export async function upsertRowsToAirtable(config, rows) {
       if (batchNumber === 1 || batchNumber % 50 === 0 || batchNumber === batches.length) {
         console.log(
           `[airtable] Upserted batch ${batchNumber}/${batches.length} ` +
-          `(created ${createdInBatch}, updated ${updatedInBatch}).`
+          `(batch created ${createdInBatch}, batch updated ${updatedInBatch}, ` +
+          `totals created ${created}, totals updated ${updated}).`
         );
       }
     } catch (error) {

@@ -43,6 +43,7 @@ function setStatus(text) {
 }
 
 function setUploadCheck({ text, tone = 'neutral' }) {
+  uploadCheckText.classList.remove('hidden');
   uploadCheckText.textContent = text;
   uploadCheckText.classList.remove('neutral', 'success', 'danger');
   uploadCheckText.classList.add(tone);
@@ -178,6 +179,7 @@ async function refreshRun() {
 async function startRun() {
   runButton.disabled = true;
   setStatus('Starting pipeline run...');
+  setUploadCheck({ text: 'Rows uploaded: --/--', tone: 'neutral' });
 
   try {
     const response = await fetch('/api/runs', { method: 'POST' });
