@@ -207,6 +207,17 @@ async function saveOutputWorkbook(records, outputPath) {
   await workbook.xlsx.writeFile(outputPath);
 }
 
+async function countNormalizedWorkbookDataRows(outputPath) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(outputPath);
+  const worksheet = workbook.getWorksheet('Normalized');
+  if (!worksheet) {
+    throw new Error(`Could not find "Normalized" worksheet in output workbook: ${outputPath}`);
+  }
+
+  return Math.max(0, worksheet.rowCount - 1);
+}
+
 function prepareAirtableRows(rows) {
   return rows.map((row) => ({
     ...row,
@@ -256,6 +267,7 @@ async function main() {
   }
 
   await saveOutputWorkbook(normalizedRows, outputPath);
+  const outputWorkbookRowCount = await countNormalizedWorkbookDataRows(outputPath);
   validateNormalizedRows(normalizedRows, perSheetSummaries);
 
   const airtableConfig = getAirtableConfig();
@@ -298,10 +310,24 @@ async function main() {
       );
     }
 
+    console.log(
+      `[airtable] Row confirmation: ${upsertResult.created}/${outputWorkbookRowCount} rows uploaded ` +
+      `(created ${upsertResult.created}, updated ${upsertResult.updated}, upserted ${upsertResult.upserted}).`
+    );
+
+    if (upsertResult.created !== outputWorkbookRowCount) {
+      throw new Error(
+        `Row confirmation failed: output workbook has ${outputWorkbookRowCount} data rows, ` +
+        `but Airtable reported ${upsertResult.created} created rows. ` +
+        `(updated ${upsertResult.updated}, upserted ${upsertResult.upserted})`
+      );
+    }
+
     airtable = {
       enabled: true,
       baseId: ensured.baseId,
       tableName: airtableConfig.tableName,
+      outputWorkbookRowCount,
       ...ensured,
       ...upsertResult
     };
