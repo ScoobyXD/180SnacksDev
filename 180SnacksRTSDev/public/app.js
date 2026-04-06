@@ -1,5 +1,6 @@
 const runButton = document.getElementById('runButton');
 const statusText = document.getElementById('statusText');
+const uploadCheckText = document.getElementById('uploadCheckText');
 const stepsList = document.getElementById('steps');
 const logsEl = document.getElementById('logs');
 const copyLogsButton = document.getElementById('copyLogsButton');
@@ -39,6 +40,12 @@ function applyPan() {
 
 function setStatus(text) {
   statusText.textContent = text;
+}
+
+function setUploadCheck({ text, tone = 'neutral' }) {
+  uploadCheckText.textContent = text;
+  uploadCheckText.classList.remove('neutral', 'success', 'danger');
+  uploadCheckText.classList.add(tone);
 }
 
 function tickClock() {
@@ -84,6 +91,27 @@ function renderLogs(logs = []) {
   logsEl.scrollTop = logsEl.scrollHeight;
 }
 
+function readUploadCheckFromLogs(logs = []) {
+  const pattern = /Row confirmation:\s*(\d+)\/(\d+)\s+rows uploaded\s*\(created\s+(\d+),\s+updated\s+(\d+),\s+upserted\s+(\d+)\)\./i;
+  for (let i = logs.length - 1; i >= 0; i -= 1) {
+    const message = String(logs[i]?.message ?? '');
+    const match = message.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    return {
+      uploaded: Number(match[1]),
+      expected: Number(match[2]),
+      created: Number(match[3]),
+      updated: Number(match[4]),
+      upserted: Number(match[5])
+    };
+  }
+
+  return null;
+}
+
 async function copyLogsToClipboard() {
   const text = latestRenderedLogsText || logsEl.textContent || '';
   if (!text) {
@@ -123,6 +151,17 @@ async function refreshRun() {
     setStatus(`Run ${run.id} is ${run.status}.`);
     renderSteps(run.steps);
     renderLogs(run.logs);
+    const uploadCheck = readUploadCheckFromLogs(run.logs);
+    if (uploadCheck) {
+      const isMatch = uploadCheck.uploaded === uploadCheck.expected;
+      setUploadCheck({
+        text: `${uploadCheck.uploaded}/${uploadCheck.expected} rows uploaded ` +
+          `(updated: ${uploadCheck.updated})`,
+        tone: isMatch ? 'success' : 'danger'
+      });
+    } else {
+      setUploadCheck({ text: 'Rows uploaded: --/--', tone: 'neutral' });
+    }
 
     const finished = run.status === 'completed' || run.status === 'failed';
     runButton.disabled = !finished;

@@ -155,6 +155,22 @@ body {
   color: #2d3340;
 }
 
+.upload-check {
+  font-weight: 600;
+}
+
+.upload-check.neutral {
+  color: #2d3340;
+}
+
+.upload-check.success {
+  color: var(--success);
+}
+
+.upload-check.danger {
+  color: var(--danger);
+}
+
 .branch-tree {
   position: absolute;
   width: 920px;

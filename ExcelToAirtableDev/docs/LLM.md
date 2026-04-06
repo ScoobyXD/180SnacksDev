@@ -76,6 +76,10 @@ Behavior:
   - `Item + Venue + Date` (Airtable upsert merge keys support at most 3 fields)
 - If merge fields match: update record.
 - If merge fields do not match: create record.
+- Performs a row confirmation check after sync:
+  - Counts data rows in the generated normalized workbook (`rowCount - 1` header).
+  - Requires Airtable `created` count to match that workbook data row count.
+  - Logs `X/Y rows uploaded` plus `updated` count for monitoring.
 - Fails run if Airtable reports a silent zero-write (`0 upserted` and `0 rejected`) when rows were attempted.
 - Rejects are written to `artifacts/rejects/*.json` and fail the run.
 - Emits progress logs during Airtable writes (batch 1, every 50th batch, and final batch).
