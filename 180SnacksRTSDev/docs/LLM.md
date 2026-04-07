@@ -12,6 +12,7 @@ This project is intentionally a thin orchestration/UI layer, not the place for r
 ## Current runtime behavior
 - Sequential pipeline execution with live status/log output.
 - One active run at a time.
+- Displays row confirmation status from ExcelToAirtable logs (e.g., `5000/5000 rows uploaded`, with updated-row monitor).
 - Cleanup at end of every run (success or failure):
   - Delete `.xlsx` in `IRIDev/artifacts/downloads`
   - Delete `.xlsx` in `ExcelToAirtableDev/artifacts`
