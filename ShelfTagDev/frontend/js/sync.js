@@ -106,22 +106,15 @@ async function uploadPhoto(photo) {
         await updatePhotoStatus(photo.id, 'syncing');
         await notifyUI();
 
-        const isDriveImport = Boolean(photo.drive_file_id && photo.drive_access_token);
-        const response = await fetch(`${API_BASE}${isDriveImport ? '/api/sync-drive' : '/api/sync'}`, {
+        const response = await fetch(`${API_BASE}/api/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(isDriveImport
-                ? {
-                    drive_file_id: photo.drive_file_id,
-                    drive_access_token: photo.drive_access_token,
-                    metadata: photo.metadata,
-                }
-                : {
-                    images_base64: Array.isArray(photo.images_base64) && photo.images_base64.length > 0
-                        ? photo.images_base64
-                        : [photo.image_base64],
-                    metadata: photo.metadata,
-                }),
+            body: JSON.stringify({
+                images_base64: Array.isArray(photo.images_base64) && photo.images_base64.length > 0
+                    ? photo.images_base64
+                    : [photo.image_base64],
+                metadata: photo.metadata,
+            }),
             signal: AbortSignal.timeout(UPLOAD_TIMEOUT),
         });
 
@@ -132,7 +125,7 @@ async function uploadPhoto(photo) {
         await notifyUI();
 
         if (result.success) {
-            console.log(`[Sync] Photo #${photo.id} synced${isDriveImport ? ' (Google Drive)' : ''} → ${result.extracted_data?.flavor || 'unknown'}`);
+            console.log(`[Sync] Photo #${photo.id} synced → ${result.extracted_data?.flavor || 'unknown'}`);
         } else {
             console.warn(`[Sync] Photo #${photo.id} uploaded but pipeline error: ${result.error}`);
         }

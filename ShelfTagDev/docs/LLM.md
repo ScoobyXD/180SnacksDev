@@ -393,10 +393,6 @@ iOS Safari aggressively kills background PWA execution and **does NOT support th
 - Under "Access", add the "Store Visits Database" base
 - Click "Create token" and copy it
 
-**3. Google Drive Integration (for Photos → Google Drive uploads)**
-- One-time admin setup only (not end users).
-- See full runbook: `docs/GOOGLE_DRIVE_SETUP.md`
-
 ## Deploying to Cloudflare Workers
 
 ### Initial Setup (already completed)
@@ -409,9 +405,6 @@ npm install                                    # Installs wrangler
 npx wrangler r2 bucket create shelftagprod     # R2 bucket for product images
 npx wrangler secret put GEMINI_API_KEY         # Google AI Studio key
 npx wrangler secret put AIRTABLE_PAT           # Airtable Personal Access Token
-npx wrangler secret put GOOGLE_DRIVE_CLIENT_ID
-npx wrangler secret put GOOGLE_DRIVE_DEVELOPER_KEY
-npx wrangler secret put GOOGLE_DRIVE_APP_ID
 npx wrangler deploy                            # Initial deployment
 ```
 

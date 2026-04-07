@@ -14,7 +14,7 @@
  */
 
 import { initCamera, capturePhoto, stopCamera, setZoom, resetZoom, getCurrentZoom, getZoomCapabilities, tapToFocus } from './camera.js';
-import { initDB, queuePhoto, queueDrivePhoto, saveUserName, getUserName, saveRetailer, getRetailer, getQueueStats, clearAllPhotos } from './storage.js';
+import { initDB, queuePhoto, saveUserName, getUserName, saveRetailer, getRetailer, getQueueStats, clearAllPhotos } from './storage.js';
 import { initSync, processQueue, onSyncStatusChange } from './sync.js';
 import { initGeolocation, getCurrentPosition } from './geo.js';
 
@@ -30,7 +30,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Also bump CACHE_VERSION in /frontend/sw.js in the same deploy so clients refresh cache.
  * - These two version values do NOT need to share the same numeric format.
  */
-const APP_VERSION = 'v01.13';
+const APP_VERSION = 'v01.09';
 
 /**
  * iOS Safari / PWA memory guardrail:
@@ -94,8 +94,6 @@ let queueStatsInterval = null;
 let captureMode = 'single'; // 'single' | 'multi'
 let multiTrayImages = [];
 let selectedMultiIndex = null;
-let isDrivePickerBusy = false;
-let googleDriveConfig = null;
 
 // Gesture state
 let pinchState = { active: false, initialDistance: 0, initialZoom: 1 };
@@ -112,7 +110,6 @@ async function init() {
     await registerServiceWorker();
     await initDB();
     initGeolocation();
-    await loadGoogleDriveConfig();
 
     const videoEl = document.getElementById('viewfinder');
     try {
@@ -326,6 +323,11 @@ async function handleMultiTrayUpload() {
 /**
  * Handle gallery uploads (iOS + Android).
  *
+ * NOTE:
+ * - Mobile Google Drive picker flows are inconsistent across browsers/PWAs.
+ * - For bulk imports, desktop workflow (download from Drive, then upload files)
+ *   is more reliable and faster for users.
+ *
  * Memory-safety design:
  * - Enforce a strict count cap.
  * - Read and queue files one by one, never in parallel.
@@ -396,148 +398,6 @@ async function handleGallerySelection(event) {
     processQueue();
 
     fileInput.value = '';
-}
-
-async function loadGoogleDriveConfig() {
-    try {
-        const response = await fetch('/api/google-drive/config', {
-            method: 'GET',
-            signal: AbortSignal.timeout(5000),
-        });
-        if (!response.ok) return;
-        const result = await response.json();
-        if (result.success) {
-            googleDriveConfig = result.config;
-        }
-    } catch (error) {
-        console.warn('[App] Google Drive config unavailable:', error.message);
-    }
-}
-
-function openPhotoSourceMenu() {
-    document.getElementById('photo-source-menu').classList.remove('hidden');
-}
-
-function closePhotoSourceMenu() {
-    document.getElementById('photo-source-menu').classList.add('hidden');
-}
-
-function openGalleryPicker() {
-    const input = document.getElementById('gallery-input');
-    if (typeof input.showPicker === 'function') {
-        input.showPicker();
-    } else {
-        input.click();
-    }
-}
-
-async function handleGoogleDriveSelection() {
-    if (isDrivePickerBusy) return;
-    isDrivePickerBusy = true;
-
-    try {
-        const userName = getUserName();
-        const retailer = getRetailer();
-
-        if (!userName || !retailer) {
-            showToast('Please enter your name and retailer first');
-            return;
-        }
-
-        if (!googleDriveConfig?.client_id || !googleDriveConfig?.developer_key) {
-            showToast('Google Drive upload is unavailable right now');
-            return;
-        }
-
-        if (!window.google?.accounts?.oauth2 || !window.google?.picker || !window.gapi) {
-            showToast('Google scripts still loading, try again');
-            return;
-        }
-
-        await new Promise((resolve, reject) => {
-            window.gapi.load('picker', {
-                callback: resolve,
-                onerror: () => reject(new Error('Failed to load Google Picker')),
-            });
-        });
-
-        const token = await getGoogleDriveAccessToken(googleDriveConfig.client_id);
-        const pickedDocs = await pickGoogleDriveImages(token, googleDriveConfig.developer_key, googleDriveConfig.app_id);
-
-        if (pickedDocs.length === 0) return;
-        if (pickedDocs.length > MAX_GALLERY_UPLOAD_COUNT) {
-            showToast(`Please select ${MAX_GALLERY_UPLOAD_COUNT} photos or fewer`);
-            return;
-        }
-
-        const position = getCurrentPosition();
-        for (let i = 0; i < pickedDocs.length; i++) {
-            const file = pickedDocs[i];
-            const metadata = {
-                user_name: userName,
-                retailer,
-                timestamp: formatTimestamp(new Date()),
-                latitude: position?.latitude || null,
-                longitude: position?.longitude || null,
-                source: 'google_drive',
-                original_filename: file.name || '',
-            };
-
-            await queueDrivePhoto({ id: file.id, name: file.name || '' }, metadata, token);
-            showToast(`Queued ${i + 1}/${pickedDocs.length}`);
-        }
-
-        const stats = await getQueueStats();
-        updateSyncBadge(stats);
-        processQueue();
-    } catch (error) {
-        console.error('[App] Google Drive import failed:', error);
-        showToast(error.message || 'Google Drive import failed');
-    } finally {
-        isDrivePickerBusy = false;
-    }
-}
-
-function getGoogleDriveAccessToken(clientId) {
-    return new Promise((resolve, reject) => {
-        const tokenClient = window.google.accounts.oauth2.initTokenClient({
-            client_id: clientId,
-            scope: 'https://www.googleapis.com/auth/drive.readonly',
-            callback: (response) => {
-                if (response?.access_token) resolve(response.access_token);
-                else reject(new Error(response?.error || 'Google auth failed'));
-            },
-        });
-        tokenClient.requestAccessToken({ prompt: 'consent select_account' });
-    });
-}
-
-function pickGoogleDriveImages(token, developerKey, appId) {
-    return new Promise((resolve) => {
-        const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
-            .setIncludeFolders(true)
-            .setMimeTypes('image/jpeg,image/png,image/webp,image/heic,image/heif')
-            .setSelectFolderEnabled(false)
-            .setMode(window.google.picker.DocsViewMode.LIST);
-
-        const picker = new window.google.picker.PickerBuilder()
-            .addView(view)
-            .setOAuthToken(token)
-            .setDeveloperKey(developerKey)
-            .setAppId(appId || '')
-            .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
-            .setCallback((data) => {
-                const action = data[window.google.picker.Response.ACTION];
-                if (action === window.google.picker.Action.PICKED) {
-                    resolve(data[window.google.picker.Response.DOCUMENTS] || []);
-                } else {
-                    resolve([]);
-                }
-            })
-            .build();
-
-        picker.setVisible(true);
-    });
 }
 
 function readFileAsBase64(file) {
@@ -923,27 +783,18 @@ function setupEventHandlers() {
         slot.addEventListener('click', handleMultiSlotSelect);
     });
 
-    // Photo sources (bottom-left icon).
+    // Gallery upload (bottom-left icon).
     document.getElementById('gallery-input').addEventListener('change', handleGallerySelection);
-    document.getElementById('gallery-btn').addEventListener('click', (event) => {
-        event.stopPropagation();
-        const menu = document.getElementById('photo-source-menu');
-        menu.classList.contains('hidden') ? openPhotoSourceMenu() : closePhotoSourceMenu();
-    });
-    document.getElementById('photo-source-gallery').addEventListener('click', () => {
-        closePhotoSourceMenu();
-        openGalleryPicker();
-    });
-    document.getElementById('photo-source-drive').addEventListener('click', async () => {
-        closePhotoSourceMenu();
-        await handleGoogleDriveSelection();
-    });
-    document.addEventListener('click', (event) => {
-        const menu = document.getElementById('photo-source-menu');
-        const galleryBtn = document.getElementById('gallery-btn');
-        if (!menu || menu.classList.contains('hidden')) return;
-        if (menu.contains(event.target) || galleryBtn.contains(event.target)) return;
-        closePhotoSourceMenu();
+    document.getElementById('gallery-btn').addEventListener('click', () => {
+        const input = document.getElementById('gallery-input');
+
+        // Best-effort path toward opening directly into the media picker UI.
+        // Browser/OS may still show source options depending on platform policy.
+        if (typeof input.showPicker === 'function') {
+            input.showPicker();
+        } else {
+            input.click();
+        }
     });
 }
 
