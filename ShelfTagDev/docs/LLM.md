@@ -600,28 +600,3 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 **iOS background uploads are unsolved:** Safari does not support Background Sync API. The `visibilitychange` flush approach was tested but iOS suspends the PWA before uploads complete. The app currently relies on foreground-only sync — photos queue in IndexedDB and upload when the user reopens the app. This works fine for typical use (field reps open the app, take photos, close it, reopen later), but photos won't upload while the app is in the background.
 
 ---
-
-# Open Items / TODOs
-
-- [x] Cloudflare Workers deployment (`shelftagdev.jonathankim829.workers.dev`)
-- [x] Gemini Flash Lite API key — set via `wrangler secret put GEMINI_API_KEY`, confirmed working
-- [x] R2 bucket bound as `IMAGES` (current `wrangler.toml` bucket: `shelftagprod`)
-- [x] Full backend pipeline deployed: `src/worker.js` (R2 storage → Gemini Flash Lite → Airtable)
-- [x] R2 custom metadata attached to images (user_name, retailer, timestamp, GPS coords)
-- [x] Phone → R2 upload confirmed working (images appear in Cloudflare dashboard)
-- [x] Gemini extraction confirmed working (returns structured JSON, nulls for non-product photos)
-- [x] Pinch-to-zoom with hardware zoom via `applyConstraints` + zoom level indicator with tap-to-reset
-- [x] Tap-to-focus with iOS-style yellow focus ring + hardware `focusMode` toggle (best-effort)
-- [x] iOS background upload via `visibilitychange` flush (parallel, fire-all-at-once) — **did not work reliably in practice, removed**
-- [x] Parallel foreground uploads (fixed 4 concurrent via `Promise.allSettled`)
-- [x] Cache version currently `shelftag-v19`
-- [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
-- [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
-- [ ] Custom domain setup for both environments (`test.shelftag.io` + `app.shelftag.io` or apex `shelftag.io`)
-- [ ] Extraction prompt iteration with real store photos (especially multi-packs, obscured price tags)
-- [ ] Image compression quality sweep (ONLY if upload speeds become a problem — run accuracy tests first)
-- [ ] Reverse geocoding for exact country → currency mapping (production improvement)
-- [x] Clarify "FX NW oz" column purpose — it's an Airtable Formula: `IF({NW g} = BLANK(), {NW oz}, {NW g} * 0.03527396)`
-- [x] "IMage" column renamed to "Image" — code already updated
-- [ ] **iOS background uploads — unsolved.** Safari does not support Background Sync API (SyncManager). The `visibilitychange` flush approach (fire all uploads when app goes to background) was implemented and tested but does not work reliably — iOS suspends the PWA before uploads complete. Remaining options: (a) native app wrapper with WKWebView + URLSession background tasks, (b) accept foreground-only uploads and rely on the 30-second retry timer + online event to catch up when the app is reopened. Currently using option (b).
-- [ ] Review 180 Snacks' Deacom contract for any restrictive automation clauses (low risk, but prudent)
