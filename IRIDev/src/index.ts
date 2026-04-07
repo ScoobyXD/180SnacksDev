@@ -147,6 +147,32 @@ async function clickVisibleMoreExport(page: Page): Promise<void> {
   await exportMenu.getByText('Export', { exact: true }).first().click();
 }
 
+async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 90_000
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) {
+        break;
+      }
+      console.warn(
+        `[iridev] Navigation attempt ${attempt}/${attempts} failed; retrying in 3000ms: ` +
+        `${error instanceof Error ? error.message : String(error)}`
+      );
+      // eslint-disable-next-line no-await-in-loop
+      await page.waitForTimeout(3000);
+    }
+  }
+
+  throw lastError;
+}
+
 async function main(): Promise<void> {
   const mode = getMode();
   await assertAuthStateExists();
@@ -159,11 +185,12 @@ async function main(): Promise<void> {
     recordVideo: { dir: 'artifacts/screenshots' }
   });
   const page = await context.newPage();
+  page.setDefaultNavigationTimeout(90_000);
+  page.setDefaultTimeout(45_000);
 
   const runStart = Date.now();
   try {
-    await page.goto(iriUrl, { waitUntil: 'domcontentloaded' });
-    await page.goto('https://advantage.iriworldwide.com/unify-CRX/plus/landing/0');
+    await gotoWithRetry(page, iriUrl);
     await page.locator('.fa.fa-grid-round:visible').first().click();
     await page.getByText('Library', { exact: true }).first().click();
     await page.getByText(reportTitle, { exact: true }).first().click();

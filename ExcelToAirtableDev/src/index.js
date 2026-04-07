@@ -39,6 +39,7 @@ function findLatestIRIDownload() {
 
   const candidates = fs.readdirSync(downloadsDir)
     .filter((name) => /\.xlsx$/i.test(name))
+    .filter((name) => !name.startsWith('~$'))
     .map((name) => {
       const fullPath = path.join(downloadsDir, name);
       const stats = fs.statSync(fullPath);
@@ -90,7 +91,7 @@ function toPrimitiveCellValue(value) {
 }
 
 function detectHeaderRow(rowArrays) {
-  const maxScan = Math.min(rowArrays.length, 25);
+  const maxScan = Math.min(rowArrays.length, 200);
   for (let i = 0; i < maxScan; i += 1) {
     const values = (rowArrays[i] || []).map((value) => String(value ?? '').toLowerCase().trim());
     if (values.includes('item') && values.includes('venue')) {
@@ -207,6 +208,17 @@ async function saveOutputWorkbook(records, outputPath) {
   await workbook.xlsx.writeFile(outputPath);
 }
 
+async function countNormalizedWorkbookDataRows(outputPath) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(outputPath);
+  const worksheet = workbook.getWorksheet('Normalized');
+  if (!worksheet) {
+    throw new Error(`Could not find "Normalized" worksheet in output workbook: ${outputPath}`);
+  }
+
+  return Math.max(0, worksheet.rowCount - 1);
+}
+
 function prepareAirtableRows(rows) {
   return rows.map((row) => ({
     ...row,
@@ -256,6 +268,7 @@ async function main() {
   }
 
   await saveOutputWorkbook(normalizedRows, outputPath);
+  const outputWorkbookRowCount = await countNormalizedWorkbookDataRows(outputPath);
   validateNormalizedRows(normalizedRows, perSheetSummaries);
 
   const airtableConfig = getAirtableConfig();
@@ -298,10 +311,24 @@ async function main() {
       );
     }
 
+    console.log(
+      `[airtable] Row confirmation: ${upsertResult.created}/${outputWorkbookRowCount} rows uploaded ` +
+      `(created ${upsertResult.created}, updated ${upsertResult.updated}, upserted ${upsertResult.upserted}).`
+    );
+
+    if (upsertResult.created !== outputWorkbookRowCount) {
+      throw new Error(
+        `Row confirmation failed: output workbook has ${outputWorkbookRowCount} data rows, ` +
+        `but Airtable reported ${upsertResult.created} created rows. ` +
+        `(updated ${upsertResult.updated}, upserted ${upsertResult.upserted})`
+      );
+    }
+
     airtable = {
       enabled: true,
       baseId: ensured.baseId,
       tableName: airtableConfig.tableName,
+      outputWorkbookRowCount,
       ...ensured,
       ...upsertResult
     };
@@ -319,8 +346,12 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+  main()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
 }

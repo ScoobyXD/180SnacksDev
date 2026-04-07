@@ -138,11 +138,12 @@ function runStep(run, step) {
 
 function cleanupOldFiles(directoryPath, matcher, keepLatest) {
   if (!fs.existsSync(directoryPath)) {
-    return [];
+    return { removed: [], skipped: [] };
   }
 
   const candidates = fs.readdirSync(directoryPath)
     .filter((name) => matcher.test(name))
+    .filter((name) => !name.startsWith('~$'))
     .map((name) => {
       const fullPath = path.join(directoryPath, name);
       const stats = fs.statSync(fullPath);
@@ -151,13 +152,19 @@ function cleanupOldFiles(directoryPath, matcher, keepLatest) {
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   const removed = [];
+  const skipped = [];
   const toDelete = candidates.slice(Math.max(0, keepLatest));
   for (const file of toDelete) {
-    fs.unlinkSync(file.fullPath);
-    removed.push(file.fullPath);
+    try {
+      fs.unlinkSync(file.fullPath);
+      removed.push(file.fullPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      skipped.push({ path: file.fullPath, reason: message });
+    }
   }
 
-  return removed;
+  return { removed, skipped };
 }
 
 function cleanupArtifacts(run) {
@@ -172,11 +179,23 @@ function cleanupArtifacts(run) {
   const downloadsDir = path.resolve(__dirname, '..', 'IRIDev', 'artifacts', 'downloads');
   const outputDir = path.resolve(__dirname, '..', 'ExcelToAirtableDev', 'artifacts');
 
-  const removedDownloads = cleanupOldFiles(downloadsDir, /\.xlsx$/i, run.cleanup.keepLatestDownloads);
-  const removedOutputs = cleanupOldFiles(outputDir, /\.xlsx$/i, run.cleanup.keepLatestOutputs);
+  const downloadCleanup = cleanupOldFiles(downloadsDir, /\.xlsx$/i, run.cleanup.keepLatestDownloads);
+  const outputCleanup = cleanupOldFiles(outputDir, /\.xlsx$/i, run.cleanup.keepLatestOutputs);
 
-  run.cleanup.removed = [...removedDownloads, ...removedOutputs];
+  run.cleanup.removed = [...downloadCleanup.removed, ...outputCleanup.removed];
+  const skipped = [...downloadCleanup.skipped, ...outputCleanup.skipped];
   appendLog(run, 'cleanup', 'info', `Cleanup removed ${run.cleanup.removed.length} old .xlsx files.`);
+  if (skipped.length > 0) {
+    appendLog(
+      run,
+      'cleanup',
+      'warn',
+      `Cleanup skipped ${skipped.length} locked/unavailable files.`
+    );
+    for (const item of skipped.slice(0, 5)) {
+      appendLog(run, 'cleanup', 'warn', `Skipped: ${item.path} (${item.reason})`);
+    }
+  }
 }
 
 async function runPipeline(run) {
