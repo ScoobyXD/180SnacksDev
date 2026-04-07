@@ -32,3 +32,7 @@ AIRTABLE_TABLE_ID = "tblvy7IdKWweV8Jdj"
 # Secrets (set via `wrangler secret put`, NEVER in this file):
 #   GEMINI_API_KEY   — Google AI Studio API key
 #   AIRTABLE_PAT     — Airtable Personal Access Token
+# Optional: set these once at deployment/admin level (not by end users):
+#   GOOGLE_DRIVE_CLIENT_ID
+#   GOOGLE_DRIVE_DEVELOPER_KEY
+#   GOOGLE_DRIVE_APP_ID
