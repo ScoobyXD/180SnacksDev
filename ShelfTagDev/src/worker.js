@@ -77,6 +77,7 @@ function handleHealth(env) {
 // ============================================================================
 
 async function handleSync(request, env) {
+    const requestOrigin = new URL(request.url).origin;
     // ---- Parse request ----
     const body = await request.json();
     const { image_base64, images_base64, metadata } = body;
@@ -115,7 +116,7 @@ async function handleSync(request, env) {
         });
 
         filenames.push(filename);
-        imageUrls.push(`https://pub-a9ceafcd290c4d5eb643aeac5b4a67d1.r2.dev/${filename}`);
+        imageUrls.push(`${requestOrigin}/uploads/${filename}`);
         console.log(`[Sync] Image stored in R2: ${filename} (${(imageBytes.byteLength / 1024).toFixed(0)} KB)`);
     }
 

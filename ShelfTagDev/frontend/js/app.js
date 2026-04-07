@@ -30,7 +30,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Also bump CACHE_VERSION in /frontend/sw.js in the same deploy so clients refresh cache.
  * - These two version values do NOT need to share the same numeric format.
  */
-const APP_VERSION = 'v01.09';
+const APP_VERSION = 'v01.10';
 
 /**
  * iOS Safari / PWA memory guardrail:

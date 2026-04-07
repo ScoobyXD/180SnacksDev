@@ -57,7 +57,7 @@ ShelfTag is a camera app on your phone that replaces manual data entry. Instead 
 
 This takes about 5 minutes.
 
-**1. Open the link on your phone.** You'll receive a URL or QR code from your manager. The current dev URL is `shelftagdev.jonathankim829.workers.dev`. Production will be something like `shelftag.180snacks.com`.
+**1. Open the link on your phone.** You'll receive a URL or QR code from your manager. The current dev URL is `shelftagdev.jonathankim829.workers.dev`. Production should use a custom domain like `app.shelftag.io` (or `shelftag.io`).
 
 **2. Allow camera access.** When the app asks for camera permission, tap "Allow." This is required — the whole app is a camera.
 
@@ -129,7 +129,7 @@ Phone (PWA)                    Backend (Cloudflare Worker)      External APIs
 ─────────────                  ─────────────────────────        ─────────────
 Camera capture                 storage_service
   ↓                              → stores image in R2
-IndexedDB queue                    → returns public R2 URL
+IndexedDB queue                    → returns Worker `/uploads/*` URL (R2 proxied)
   ↓ (when online)
 POST /api/sync                 gemini_service                  → Google Gemini Flash Lite
   ↓                              → sends image + prompt
@@ -173,10 +173,10 @@ Step by step, what happens when a user takes a photo:
 2. Photo + metadata (user name, retailer, timestamp MM/DD/YYYY HH:MM, GPS coords) stored in IndexedDB
 3. Sync module detects connectivity (`navigator.onLine` + Worker health check ping)
 4. When online: POST `{ images_base64, metadata }` to `/api/sync` (single capture still works via legacy `image_base64`)
-5. Worker stores image in Cloudflare R2 → constructs a public R2 URL
+5. Worker stores image in Cloudflare R2 → constructs a Worker-hosted `/uploads/<file>` URL
 6. Worker sends image to Gemini Flash Lite with extraction prompt → gets structured JSON
 7. Worker creates Airtable record via REST API with all fields + image URL
-8. Airtable downloads the image from the public R2 URL and stores its own copy
+8. Airtable downloads the image from the Worker `/uploads/*` URL and stores its own copy
 9. Airtable Formula fields (RT/oz, FX NW oz, RT/oz Discounted) compute automatically from the written data
 10. Worker acknowledges receipt (success or pipeline failure) → frontend deletes local copy from IndexedDB
 
@@ -352,7 +352,7 @@ iOS Safari aggressively kills background PWA execution and **does NOT support th
 
 ## PWA Behavior & Distribution
 
-**Distribution:** No app store needed. Users visit the URL (`shelftagdev.jonathankim829.workers.dev` for dev, or `shelftag.180snacks.com` for production) in their phone browser and tap "Add to Home Screen." Can share via QR code.
+**Distribution:** No app store needed. Users visit the URL (`shelftagdev.jonathankim829.workers.dev` for dev, or `app.shelftag.io` / `shelftag.io` for production) in their phone browser and tap "Add to Home Screen." Can share via QR code.
 
 **Session behavior:** Tapping the home screen icon reopens the same context, not a new tab. State is restored from localStorage/IndexedDB if the OS kills the process. The `manifest.json` uses `"display": "standalone"` mode.
 
@@ -363,7 +363,7 @@ iOS Safari aggressively kills background PWA execution and **does NOT support th
 - API keys (Gemini, Airtable) are ONLY stored in Cloudflare Worker environment variables (set via `wrangler secret` or Cloudflare dashboard)
 - Frontend NEVER has direct access to any API key
 - Phone only talks to the Worker endpoint (`shelftagdev.jonathankim829.workers.dev`)
-- R2 bucket is configured as **public** (`pub-a9ceafcd290c4d5eb643aeac5b4a67d1.r2.dev`). All stored images are accessible via direct URL. This is acceptable because the images are product shelf photos (not sensitive data). If privacy requirements change, switch to presigned URLs with expiry.
+- R2 bucket is **not required to be public**. Images are served through the Worker route (`/uploads/*`) from the same origin as the API, so Airtable fetches through your domain instead of `*.r2.dev`.
 - `.env` files are for local development reference only and are git-ignored
 
 ## Prerequisites & Deployment
@@ -423,6 +423,19 @@ That's it — one command pushes both the Worker code and all `frontend/` static
 If you update the service worker cache version in `sw.js` (e.g. `shelftag-v15` → `shelftag-v16`), phones will pull the new files on next app open. Bump that cache key any time you change CSS/JS/HTML that the SW caches. Also bump the in-app version label (`APP_VERSION` in `frontend/js/app.js`) every frontend deploy. The cache key format and app label format can differ.
 
 The Worker is live at: `shelftagdev.jonathankim829.workers.dev`
+
+### Move Production to `shelftag.io` (Cloudflare)
+
+Use these exact steps to avoid exposing `*.workers.dev` in production:
+
+1. Add `shelftag.io` to Cloudflare DNS (if not already there) and ensure nameservers are delegated to Cloudflare.
+2. In Cloudflare dashboard: **Workers & Pages → shelftagdev (or prod Worker) → Settings → Domains & Routes**.
+3. Click **Add Custom Domain** and enter `app.shelftag.io` (recommended) or `shelftag.io` (root).
+4. Accept DNS record creation (Cloudflare creates/updates the proxied CNAME/flattened record automatically).
+5. Wait for SSL provisioning (usually a few minutes), then verify `https://app.shelftag.io/api/health`.
+6. Update any shared QR codes/links to the new domain.
+7. Optional but recommended: keep `workers.dev` enabled for emergency fallback only.
+8. For this repository, set production Worker `name` separately (e.g., `shelftagprod`) and deploy that environment so dev/prod URLs stay isolated.
 
 ### Testing
 
@@ -507,11 +520,11 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 
 **Airtable "overview" rows:** Some existing rows in the Airtable (rows 1, 6, 16 in screenshots) appear to be section headers, not product entries. The app should not create these — they're manually managed.
 
-**Airtable image download timing:** When the Worker creates a record with an image URL, Airtable asynchronously downloads the image from the public R2 bucket. Since the bucket is public, there is no URL expiry concern — images persist indefinitely.
+**Airtable image download timing:** When the Worker creates a record with an image URL, Airtable asynchronously downloads the image from the Worker `/uploads/*` route, which streams bytes from R2. This avoids direct dependency on public `*.r2.dev` endpoints.
 
 **Service worker update behavior:** ShelfTag now sends `SKIP_WAITING` to newly installed workers and reloads on `controllerchange`, so new deployments should activate on the next open/reload instead of requiring multiple full app closes. Still bump `CACHE_VERSION` in `sw.js` whenever frontend assets change.
 
-**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`; current code value is `v01.07`). Bump this label for frontend behavior changes, and also bump `CACHE_VERSION` in `sw.js` in the same deploy. The two values can use different formats.
+**Version display + bump rule:** The UI shows an explicit version under the top-left status indicator (format `v##.##`; current code value is `v01.10`). Bump this label for frontend behavior changes, and also bump `CACHE_VERSION` in `sw.js` in the same deploy. The two values can use different formats.
 
 **Gallery upload memory guardrail:** iOS Safari PWAs can crash under high in-memory image loads. Keep batch uploads capped and process gallery files sequentially (never decode dozens of full-res photos in parallel). Current cap: 30 selected images per batch.
 
