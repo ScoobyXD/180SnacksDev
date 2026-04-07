@@ -326,6 +326,11 @@ async function handleMultiTrayUpload() {
 /**
  * Handle gallery uploads (iOS + Android).
  *
+ * NOTE:
+ * - Mobile Google Drive picker flows are inconsistent across browsers/PWAs.
+ * - For bulk imports, desktop workflow (download from Drive, then upload files)
+ *   is more reliable and faster for users.
+ *
  * Memory-safety design:
  * - Enforce a strict count cap.
  * - Read and queue files one by one, never in parallel.
