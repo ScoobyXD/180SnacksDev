@@ -30,7 +30,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Also bump CACHE_VERSION in /frontend/sw.js in the same deploy so clients refresh cache.
  * - These two version values do NOT need to share the same numeric format.
  */
-const APP_VERSION = 'v01.11';
+const APP_VERSION = 'v01.12';
 
 /**
  * iOS Safari / PWA memory guardrail:
@@ -408,12 +408,18 @@ async function loadGoogleDriveConfig() {
         const result = await response.json();
         if (result.success) {
             googleDriveConfig = result.config;
-            const driveBtn = document.getElementById('drive-btn');
-            if (driveBtn) driveBtn.classList.remove('hidden');
         }
     } catch (error) {
         console.warn('[App] Google Drive config unavailable:', error.message);
     }
+}
+
+function openPhotoSourceMenu() {
+    document.getElementById('photo-source-menu').classList.remove('hidden');
+}
+
+function closePhotoSourceMenu() {
+    document.getElementById('photo-source-menu').classList.add('hidden');
 }
 
 function openGalleryPicker() {
@@ -439,7 +445,7 @@ async function handleGoogleDriveSelection() {
         }
 
         if (!googleDriveConfig?.client_id || !googleDriveConfig?.developer_key) {
-            showToast('Google Drive is not configured');
+            showToast('Google Drive upload is unavailable right now');
             return;
         }
 
@@ -917,13 +923,27 @@ function setupEventHandlers() {
         slot.addEventListener('click', handleMultiSlotSelect);
     });
 
-    // Photo sources (bottom-left icons).
+    // Photo sources (bottom-left icon).
     document.getElementById('gallery-input').addEventListener('change', handleGallerySelection);
-    document.getElementById('gallery-btn').addEventListener('click', () => {
+    document.getElementById('gallery-btn').addEventListener('click', (event) => {
+        event.stopPropagation();
+        const menu = document.getElementById('photo-source-menu');
+        menu.classList.contains('hidden') ? openPhotoSourceMenu() : closePhotoSourceMenu();
+    });
+    document.getElementById('photo-source-gallery').addEventListener('click', () => {
+        closePhotoSourceMenu();
         openGalleryPicker();
     });
-    document.getElementById('drive-btn').addEventListener('click', async () => {
+    document.getElementById('photo-source-drive').addEventListener('click', async () => {
+        closePhotoSourceMenu();
         await handleGoogleDriveSelection();
+    });
+    document.addEventListener('click', (event) => {
+        const menu = document.getElementById('photo-source-menu');
+        const galleryBtn = document.getElementById('gallery-btn');
+        if (!menu || menu.classList.contains('hidden')) return;
+        if (menu.contains(event.target) || galleryBtn.contains(event.target)) return;
+        closePhotoSourceMenu();
     });
 }
 

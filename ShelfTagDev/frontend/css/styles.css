@@ -207,17 +207,38 @@ html, body {
     display: none;
 }
 
-#drive-btn.hidden {
+#photo-source-menu {
+    position: absolute;
+    left: 10px;
+    bottom: 54px;
+    min-width: 138px;
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.24);
+    background: rgba(18, 18, 18, 0.95);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.34);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 90;
+}
+
+#photo-source-menu.hidden {
     display: none;
 }
 
-#drive-btn {
-    font-size: 16px;
-    font-weight: 800;
-    letter-spacing: 0.2px;
-    color: #0f0f0f;
-    background: rgba(255, 214, 10, 0.93);
-    border-color: rgba(255,255,255,0.75);
+#photo-source-menu button {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: left;
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+    font-size: 13px;
+}
+
+#photo-source-menu button:active {
+    transform: scale(0.98);
 }
 
 /* ---- Multi Tray ---- */
