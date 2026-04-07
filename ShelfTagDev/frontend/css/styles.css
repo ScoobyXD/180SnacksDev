@@ -146,6 +146,7 @@ html, body {
 
 /* ---- Small Icon Controls (gallery / zoom / mode) ---- */
 #gallery-btn,
+#drive-btn,
 #zoom-btn,
 #capture-mode-btn {
     color: #fff;
@@ -188,6 +189,7 @@ html, body {
 }
 
 #gallery-btn:active,
+#drive-btn:active,
 #zoom-btn:active,
 #capture-mode-btn:active {
     transform: scale(0.92);
