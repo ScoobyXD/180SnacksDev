@@ -90,6 +90,36 @@ export async function queuePhoto(imageOrImagesBase64, metadata) {
     });
 }
 
+/**
+ * Queue a Google Drive image import for server-side transfer (Drive → R2).
+ */
+export async function queueDrivePhoto(driveFile, metadata, accessToken) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+
+        const record = {
+            image_base64: null,
+            images_base64: [],
+            metadata,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            sync_attempts: 0,
+            last_error: null,
+            drive_file_id: driveFile.id,
+            drive_file_name: driveFile.name || '',
+            drive_access_token: accessToken,
+        };
+
+        const request = store.add(record);
+        request.onsuccess = () => {
+            console.log(`[Storage] Google Drive photo queued: #${request.result} (${record.drive_file_name || record.drive_file_id})`);
+            resolve(request.result);
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
 
 export async function getPendingPhotos() {
     return new Promise((resolve, reject) => {

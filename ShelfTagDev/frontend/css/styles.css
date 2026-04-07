@@ -130,6 +130,7 @@ html, body {
     display: flex;
     justify-content: space-evenly;
     align-items: center;
+    overflow: visible;
 }
 
 /* Right container — centers selector in the right half (between shutter and right edge) */
@@ -145,6 +146,7 @@ html, body {
 
 /* ---- Small Icon Controls (gallery / zoom / mode) ---- */
 #gallery-btn,
+#drive-btn,
 #zoom-btn,
 #capture-mode-btn {
     color: #fff;
@@ -187,6 +189,7 @@ html, body {
 }
 
 #gallery-btn:active,
+#drive-btn:active,
 #zoom-btn:active,
 #capture-mode-btn:active {
     transform: scale(0.92);
@@ -202,6 +205,19 @@ html, body {
 
 #gallery-input {
     display: none;
+}
+
+#drive-btn.hidden {
+    display: none;
+}
+
+#drive-btn {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    color: #0f0f0f;
+    background: rgba(255, 214, 10, 0.93);
+    border-color: rgba(255,255,255,0.75);
 }
 
 /* ---- Multi Tray ---- */
