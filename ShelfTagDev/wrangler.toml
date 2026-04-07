@@ -28,6 +28,9 @@ bucket_name = "shelftag-images"
 [vars]
 AIRTABLE_BASE_ID = "app6VXhFVBp1H215u"
 AIRTABLE_TABLE_ID = "tblvy7IdKWweV8Jdj"
+# Optional explicit image host for Airtable attachment URLs.
+# If unset, worker falls back to the request origin.
+IMAGE_BASE_URL = "https://shelftagdev.jonathankim829.workers.dev"
 
 # Secrets (set via `wrangler secret put`, NEVER in this file):
 #   GEMINI_API_KEY   — Google AI Studio API key

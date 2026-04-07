@@ -366,6 +366,31 @@ iOS Safari aggressively kills background PWA execution and **does NOT support th
 - R2 bucket is **not required to be public**. Images are served through the Worker route (`/uploads/*`) from the same origin as the API, so Airtable fetches through your domain instead of `*.r2.dev`.
 - `.env` files are for local development reference only and are git-ignored
 
+### Image Delivery (Old vs New, Technical Detail)
+
+**Old approach (problematic for production):**
+- After `env.IMAGES.put(...)`, the Worker returned attachment URLs like `https://<public-bucket-id>.r2.dev/<filename>`.
+- That requires a **public R2 dev domain** (`*.r2.dev`) and bypasses your Worker/domain layer.
+- Cloudflare explicitly positions public dev URLs as convenience endpoints, with stricter limits and fewer production guarantees than custom-domain traffic through your zone/Worker.
+- Operational downside: image fetch traffic from Airtable goes straight to `r2.dev`, so you lose centralized control (routing, policy, analytics, branding domain, future auth rules) at your Worker edge.
+
+**Current approach (production-safe architecture):**
+- Worker still writes raw bytes into R2 via `env.IMAGES.put(...)`.
+- Instead of `*.r2.dev`, Worker stores Airtable attachment URLs as `https://<image-base-domain>/uploads/<filename>`.
+  - Resolution order in code: `env.IMAGE_BASE_URL` (if set) → fallback to incoming request origin.
+- The `/uploads/*` route in `src/worker.js` performs `env.IMAGES.get(key)` and streams bytes back to Airtable.
+- Benefits:
+  - Works with custom domains (`app.shelftag.io`, etc.).
+  - No direct dependency on public `*.r2.dev`.
+  - Keeps all client/API/image traffic under your Worker zone and controls.
+  - Easier future hardening (WAF rules, signed-token gateway, tighter caching policy).
+  - Compatible with clients/integrations that send `HEAD` before `GET` on attachment URLs.
+
+**R2 Public Development URL toggle (`*.r2.dev`):**
+- For this Worker-proxy architecture, you can safely **disable** the R2 Public Development URL.
+- Disabling it does **not** break Worker `env.IMAGES.put/get` access.
+- Keep it enabled only if you still directly reference `https://<bucket>.r2.dev/...` anywhere.
+
 ## Prerequisites & Deployment
 
 ### Software Requirements
@@ -436,6 +461,34 @@ Use these exact steps to avoid exposing `*.workers.dev` in production:
 6. Update any shared QR codes/links to the new domain.
 7. Optional but recommended: keep `workers.dev` enabled for emergency fallback only.
 8. For this repository, set production Worker `name` separately (e.g., `shelftagprod`) and deploy that environment so dev/prod URLs stay isolated.
+
+### Test + Production Environment Mapping (recommended for your setup)
+
+You mentioned you maintain full duplicates (test + prod): Worker URL, R2 bucket, Gemini key, Airtable base/table, and domains. Use this mapping:
+
+1. **Test environment**
+   - Worker hostname: `shelftagtest.jonathankim829.workers.dev` (or current test worker)
+   - Custom domain: `test.shelftag.io`
+   - R2 bucket: `shelftag-images-test`
+   - Secrets: test Gemini key + test Airtable PAT
+   - Airtable vars: test base/table IDs
+2. **Production environment**
+   - Worker hostname: `shelftagprod.jonathankim829.workers.dev` (internal fallback only)
+   - Custom domain: `app.shelftag.io` (or `shelftag.io`)
+   - R2 bucket: `shelftag-images-prod`
+   - Secrets: prod Gemini key + prod Airtable PAT
+   - Airtable vars: prod base/table IDs
+
+**Cloudflare steps for each environment (repeat for test, then prod):**
+1. Workers & Pages → select the target Worker/environment.
+2. Settings → Domains & Routes → Add Custom Domain.
+3. Set test to `test.shelftag.io`, set prod to `app.shelftag.io` (or apex).
+4. Confirm proxied DNS record creation in Cloudflare DNS.
+5. Wait for certificate issuance.
+6. Verify health:
+   - `https://test.shelftag.io/api/health` (test)
+   - `https://app.shelftag.io/api/health` (prod)
+7. Confirm one end-to-end sync in each environment and verify Airtable rows land in the matching base (test vs prod).
 
 ### Testing
 
@@ -561,10 +614,10 @@ Jonathan initially asked why we don't just use "browser cache." The distinction:
 - [x] Tap-to-focus with iOS-style yellow focus ring + hardware `focusMode` toggle (best-effort)
 - [x] iOS background upload via `visibilitychange` flush (parallel, fire-all-at-once) — **did not work reliably in practice, removed**
 - [x] Parallel foreground uploads (fixed 4 concurrent via `Promise.allSettled`)
-- [x] Cache version currently `shelftag-v18`
+- [x] Cache version currently `shelftag-v19`
 - [ ] **Airtable PAT — needs re-entry** (current token returns 401; likely truncated during paste)
 - [ ] End-to-end test with real snack product photo (once Airtable PAT is fixed)
-- [ ] Custom domain setup (e.g. `shelftag.180snacks.com`)
+- [ ] Custom domain setup for both environments (`test.shelftag.io` + `app.shelftag.io` or apex `shelftag.io`)
 - [ ] Extraction prompt iteration with real store photos (especially multi-packs, obscured price tags)
 - [ ] Image compression quality sweep (ONLY if upload speeds become a problem — run accuracy tests first)
 - [ ] Reverse geocoding for exact country → currency mapping (production improvement)

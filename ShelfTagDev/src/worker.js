@@ -39,8 +39,8 @@ export default {
             }
 
             // ---- Serve images from R2 ----
-            if (url.pathname.startsWith('/uploads/') && request.method === 'GET') {
-                return await handleImage(url.pathname, env);
+            if (url.pathname.startsWith('/uploads/') && (request.method === 'GET' || request.method === 'HEAD')) {
+                return await handleImage(url.pathname, request.method, env);
             }
 
             // ---- Nothing matched ----
@@ -78,6 +78,7 @@ function handleHealth(env) {
 
 async function handleSync(request, env) {
     const requestOrigin = new URL(request.url).origin;
+    const imageBaseUrl = String(env.IMAGE_BASE_URL || '').trim().replace(/\/$/, '') || requestOrigin;
     // ---- Parse request ----
     const body = await request.json();
     const { image_base64, images_base64, metadata } = body;
@@ -116,7 +117,7 @@ async function handleSync(request, env) {
         });
 
         filenames.push(filename);
-        imageUrls.push(`${requestOrigin}/uploads/${filename}`);
+        imageUrls.push(`${imageBaseUrl}/uploads/${filename}`);
         console.log(`[Sync] Image stored in R2: ${filename} (${(imageBytes.byteLength / 1024).toFixed(0)} KB)`);
     }
 
@@ -377,7 +378,7 @@ async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId
 // IMAGE SERVING — Serve product photos from R2
 // ============================================================================
 
-async function handleImage(pathname, env) {
+async function handleImage(pathname, method, env) {
     // pathname is like "/uploads/abc123.jpg"
     const key = pathname.replace('/uploads/', '');
 
@@ -386,14 +387,18 @@ async function handleImage(pathname, env) {
         return new Response('Image not found', { status: 404 });
     }
 
-    return new Response(object.body, {
-        headers: {
-            'Content-Type': object.httpMetadata?.contentType || 'image/jpeg',
-            'Content-Length': object.size,
-            'Accept-Ranges': 'bytes',
-            'Cache-Control': 'public, max-age=86400',
-        },
-    });
+    const headers = {
+        'Content-Type': object.httpMetadata?.contentType || 'image/jpeg',
+        'Content-Length': String(object.size),
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=86400',
+    };
+
+    if (method === 'HEAD') {
+        return new Response(null, { headers });
+    }
+
+    return new Response(object.body, { headers });
 }
 
 
