@@ -15,12 +15,9 @@
  *   env.AIRTABLE_PAT    — Airtable Personal Access Token (secret)
  *   env.AIRTABLE_BASE_ID  — Airtable base ID
  *   env.AIRTABLE_TABLE_ID — Airtable table ID
- *   env.GOOGLE_DRIVE_CLIENT_ID — Google OAuth client ID (public)
- *   env.GOOGLE_DRIVE_DEVELOPER_KEY — Google Picker API key (public)
- *   env.GOOGLE_DRIVE_APP_ID — Google Cloud project number (optional)
  */
 
-const WORKER_VERSION = '2026-04-06-drive-import';
+const WORKER_VERSION = '2026-04-02-r1';
 
 export default {
     async fetch(request, env, ctx) {
@@ -39,12 +36,6 @@ export default {
 
             if (url.pathname === '/api/sync' && request.method === 'POST') {
                 return withCORS(await handleSync(request, env));
-            }
-            if (url.pathname === '/api/sync-drive' && request.method === 'POST') {
-                return withCORS(await handleDriveSync(request, env));
-            }
-            if (url.pathname === '/api/google-drive/config' && request.method === 'GET') {
-                return withCORS(handleGoogleDriveConfig(env));
             }
 
             // ---- Serve images from R2 ----
@@ -76,21 +67,7 @@ function handleHealth(env) {
         gemini_configured: !!env.GEMINI_API_KEY,
         airtable_configured: !!env.AIRTABLE_PAT,
         r2_configured: !!env.IMAGES,
-        google_drive_configured: !!env.GOOGLE_DRIVE_CLIENT_ID && !!env.GOOGLE_DRIVE_DEVELOPER_KEY,
         worker_version: WORKER_VERSION,
-    });
-}
-
-function handleGoogleDriveConfig(env) {
-    const clientId = env.GOOGLE_DRIVE_CLIENT_ID || '';
-    const developerKey = env.GOOGLE_DRIVE_DEVELOPER_KEY || '';
-    return Response.json({
-        success: Boolean(clientId && developerKey),
-        config: {
-            client_id: clientId,
-            developer_key: developerKey,
-            app_id: env.GOOGLE_DRIVE_APP_ID || '',
-        },
     });
 }
 
@@ -100,6 +77,7 @@ function handleGoogleDriveConfig(env) {
 // ============================================================================
 
 async function handleSync(request, env) {
+    // ---- Parse request ----
     const body = await request.json();
     const { image_base64, images_base64, metadata } = body;
     const imageList = Array.isArray(images_base64) && images_base64.length > 0
@@ -113,101 +91,38 @@ async function handleSync(request, env) {
         );
     }
 
-    return runSyncPipeline({
-        env,
-        metadata,
-        images: imageList.map((imageBase64) => ({
-            bytes: base64ToBytes(imageBase64),
-            mimeType: 'image/jpeg',
-            extension: 'jpg',
-            base64: imageBase64,
-        })),
-    });
-}
+    console.log(`[Sync ${WORKER_VERSION}] Processing ${imageList.length} image(s) from ${metadata.user_name} at ${metadata.retailer}`);
 
-async function handleDriveSync(request, env) {
-    const body = await request.json();
-    const { drive_file_id: driveFileId, drive_access_token: driveAccessToken, metadata } = body;
-    if (!driveFileId || !driveAccessToken || !metadata) {
-        return Response.json(
-            { success: false, error: 'Missing drive_file_id, drive_access_token, or metadata' },
-            { status: 400 }
-        );
-    }
-
-    const metadataResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?fields=id,name,mimeType`, {
-        headers: { Authorization: `Bearer ${driveAccessToken}` },
-    });
-    if (!metadataResponse.ok) {
-        const errorText = await metadataResponse.text();
-        return Response.json({ success: false, error: `Drive metadata fetch failed: ${metadataResponse.status} ${errorText}` }, { status: 400 });
-    }
-
-    const driveFile = await metadataResponse.json();
-    if (!String(driveFile.mimeType || '').startsWith('image/')) {
-        return Response.json({ success: false, error: `Unsupported Drive mime type: ${driveFile.mimeType || 'unknown'}` }, { status: 400 });
-    }
-
-    const contentResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`, {
-        headers: { Authorization: `Bearer ${driveAccessToken}` },
-    });
-    if (!contentResponse.ok) {
-        const errorText = await contentResponse.text();
-        return Response.json({ success: false, error: `Drive content fetch failed: ${contentResponse.status} ${errorText}` }, { status: 400 });
-    }
-
-    const bytes = new Uint8Array(await contentResponse.arrayBuffer());
-    const extension = getExtensionForMimeType(driveFile.mimeType);
-    const base64 = bytesToBase64(bytes);
-
-    return runSyncPipeline({
-        env,
-        metadata: {
-            ...metadata,
-            source: 'google_drive',
-            original_filename: driveFile.name || metadata.original_filename || '',
-        },
-        images: [{
-            bytes,
-            mimeType: driveFile.mimeType || 'image/jpeg',
-            extension,
-            base64,
-        }],
-    });
-}
-
-async function runSyncPipeline({ env, metadata, images }) {
-    console.log(`[Sync ${WORKER_VERSION}] Processing ${images.length} image(s) from ${metadata.user_name} at ${metadata.retailer} [${metadata.source || 'camera'}]`);
-
+    // ---- Step 1: Store images in R2 (with metadata for debugging) ----
     const filenames = [];
     const imageUrls = [];
-    for (let i = 0; i < images.length; i++) {
-        const image = images[i];
-        const filename = `${crypto.randomUUID()}-${i + 1}.${image.extension || 'jpg'}`;
-        await env.IMAGES.put(filename, image.bytes, {
-            httpMetadata: { contentType: image.mimeType || 'image/jpeg' },
+    for (let i = 0; i < imageList.length; i++) {
+        const filename = `${crypto.randomUUID()}-${i + 1}.jpg`;
+        const imageBytes = base64ToBytes(imageList[i]);
+
+        await env.IMAGES.put(filename, imageBytes, {
+            httpMetadata: { contentType: 'image/jpeg' },
             customMetadata: {
                 user_name: metadata.user_name || '',
                 retailer: metadata.retailer || '',
                 timestamp: metadata.timestamp || '',
                 latitude: String(metadata.latitude || ''),
                 longitude: String(metadata.longitude || ''),
-                capture_mode: images.length > 1 ? 'multi' : 'single',
+                capture_mode: imageList.length > 1 ? 'multi' : 'single',
                 image_index: String(i + 1),
-                image_count: String(images.length),
-                source: metadata.source || 'camera',
-                original_filename: metadata.original_filename || '',
+                image_count: String(imageList.length),
             },
         });
 
         filenames.push(filename);
         imageUrls.push(`https://pub-a9ceafcd290c4d5eb643aeac5b4a67d1.r2.dev/${filename}`);
-        console.log(`[Sync] Image stored in R2: ${filename} (${(image.bytes.byteLength / 1024).toFixed(0)} KB)`);
+        console.log(`[Sync] Image stored in R2: ${filename} (${(imageBytes.byteLength / 1024).toFixed(0)} KB)`);
     }
 
+    // ---- Step 2: Extract product data with Gemini Flash Lite ----
     let extraction = null;
     try {
-        extraction = await extractWithGemini(images, env.GEMINI_API_KEY);
+        extraction = await extractWithGemini(imageList, env.GEMINI_API_KEY);
         console.log(
             `[Sync] Extracted: ${extraction.flavor || 'unknown'} | ${extraction.brand || 'unknown'} | `
             + `${extraction.nw_oz || '?'}oz | regular:$${extraction.retail_regular || '?'} | `
@@ -222,6 +137,7 @@ async function runSyncPipeline({ env, metadata, images }) {
         });
     }
 
+    // ---- Step 3: Create Airtable record ----
     try {
         const recordId = await createAirtableRecord(
             extraction,
@@ -232,10 +148,11 @@ async function runSyncPipeline({ env, metadata, images }) {
             env.AIRTABLE_TABLE_ID
         );
         console.log(`[Sync] Airtable record created: ${recordId}`);
+
         return Response.json({
             success: true,
             airtable_record_id: recordId,
-            image_count: images.length,
+            image_count: imageList.length,
             extracted_data: extraction,
         });
     } catch (airtableError) {
@@ -339,12 +256,12 @@ const RESPONSE_SCHEMA = {
 };
 
 
-async function extractWithGemini(images, apiKey) {
+async function extractWithGemini(imageBase64List, apiKey) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`;
-    const parts = images.map((image) => ({
+    const parts = imageBase64List.map((imageBase64) => ({
         inline_data: {
-            mime_type: image.mimeType || "image/jpeg",
-            data: image.base64,
+            mime_type: "image/jpeg",
+            data: imageBase64,
         }
     }));
     parts.push({ text: EXTRACTION_PROMPT });
@@ -428,9 +345,6 @@ async function createAirtableRecord(extraction, metadata, imageUrls, pat, baseId
     // Image attachment — Airtable downloads from this URL
     fields["Image"] = imageUrls.map((url) => ({ url })); // Multiple images in single row supported
 
-    // NOTE: Retailer markup and "Price Sold To Retailer" are intentionally NOT computed in worker code.
-    // Those values should be handled by Airtable formulas/configuration only.
-
     // Currency note
     if (currencyNote) fields["Notes"] = currencyNote;
 
@@ -497,24 +411,6 @@ function base64ToBytes(base64) {
         bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes;
-}
-
-function bytesToBase64(bytes) {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-}
-
-function getExtensionForMimeType(mimeType) {
-    switch (mimeType) {
-        case 'image/png': return 'png';
-        case 'image/webp': return 'webp';
-        case 'image/heic': return 'heic';
-        case 'image/heif': return 'heif';
-        default: return 'jpg';
-    }
 }
 
 /**
