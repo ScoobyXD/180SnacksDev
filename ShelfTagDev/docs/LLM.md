@@ -57,7 +57,7 @@ ShelfTag is a camera app on your phone that replaces manual data entry. Instead 
 
 This takes about 5 minutes.
 
-**1. Open the link on your phone.** You'll receive a URL or QR code from your manager. The current dev URL is `shelftagdev.jonathankim829.workers.dev`. Production should use a custom domain like `app.shelftag.io` (or `shelftag.io`).
+**1. Open the link on your phone.** You'll receive a URL or QR code from your manager. The current dev URL is `shelftagdev.jonathankim829.workers.dev`. Production uses `shelftag.io`.
 
 **2. Allow camera access.** When the app asks for camera permission, tap "Allow." This is required — the whole app is a camera.
 
@@ -352,7 +352,7 @@ iOS Safari aggressively kills background PWA execution and **does NOT support th
 
 ## PWA Behavior & Distribution
 
-**Distribution:** No app store needed. Users visit the URL (`shelftagdev.jonathankim829.workers.dev` for dev, or `app.shelftag.io` / `shelftag.io` for production) in their phone browser and tap "Add to Home Screen." Can share via QR code.
+**Distribution:** No app store needed. Users visit the URL (`shelftagdev.jonathankim829.workers.dev` for dev, and `shelftag.io` for production) in their phone browser and tap "Add to Home Screen." Can share via QR code.
 
 **Session behavior:** Tapping the home screen icon reopens the same context, not a new tab. State is restored from localStorage/IndexedDB if the OS kills the process. The `manifest.json` uses `"display": "standalone"` mode.
 
@@ -380,7 +380,7 @@ iOS Safari aggressively kills background PWA execution and **does NOT support th
   - Resolution order in code: `env.IMAGE_BASE_URL` (if set) → fallback to incoming request origin.
 - The `/uploads/*` route in `src/worker.js` performs `env.IMAGES.get(key)` and streams bytes back to Airtable.
 - Benefits:
-  - Works with custom domains (`app.shelftag.io`, etc.).
+  - Works with custom domains (for this project, `shelftag.io`).
   - No direct dependency on public `*.r2.dev`.
   - Keeps all client/API/image traffic under your Worker zone and controls.
   - Easier future hardening (WAF rules, signed-token gateway, tighter caching policy).
@@ -449,46 +449,32 @@ If you update the service worker cache version in `sw.js` (e.g. `shelftag-v15` �
 
 The Worker is live at: `shelftagdev.jonathankim829.workers.dev`
 
-### Move Production to `shelftag.io` (Cloudflare)
+### Production Domain Setup (Current State)
 
-Use these exact steps to avoid exposing `*.workers.dev` in production:
+Production is fully migrated to `shelftag.io`.
 
-1. Add `shelftag.io` to Cloudflare DNS (if not already there) and ensure nameservers are delegated to Cloudflare.
-2. In Cloudflare dashboard: **Workers & Pages → shelftagdev (or prod Worker) → Settings → Domains & Routes**.
-3. Click **Add Custom Domain** and enter `app.shelftag.io` (recommended) or `shelftag.io` (root).
-4. Accept DNS record creation (Cloudflare creates/updates the proxied CNAME/flattened record automatically).
-5. Wait for SSL provisioning (usually a few minutes), then verify `https://app.shelftag.io/api/health`.
-6. Update any shared QR codes/links to the new domain.
-7. Optional but recommended: keep `workers.dev` enabled for emergency fallback only.
-8. For this repository, set production Worker `name` separately (e.g., `shelftagprod`) and deploy that environment so dev/prod URLs stay isolated.
+- **Hosting:** Cloudflare Worker (`shelftagprod.jonathankim829.workers.dev`)
+- **Custom domain:** `shelftag.io` (attached in Workers → Settings → Domains & Routes)
+- **DNS authority:** Cloudflare (Namecheap DNS records are no longer active)
 
-### Test + Production Environment Mapping (recommended for your setup)
+**How traffic flows**
 
-You mentioned you maintain full duplicates (test + prod): Worker URL, R2 bucket, Gemini key, Airtable base/table, and domains. Use this mapping:
+`User → shelftag.io → Cloudflare DNS/proxy/TLS → Worker → Response`
 
-1. **Test environment**
-   - Worker hostname: `shelftagtest.jonathankim829.workers.dev` (or current test worker)
-   - Custom domain: `test.shelftag.io`
-   - R2 bucket: `shelftag-images-test`
-   - Secrets: test Gemini key + test Airtable PAT
-   - Airtable vars: test base/table IDs
-2. **Production environment**
-   - Worker hostname: `shelftagprod.jonathankim829.workers.dev` (internal fallback only)
-   - Custom domain: `app.shelftag.io` (or `shelftag.io`)
-   - R2 bucket: `shelftag-images-prod`
-   - Secrets: prod Gemini key + prod Airtable PAT
-   - Airtable vars: prod base/table IDs
+- Cloudflare handles DNS, proxying, and TLS termination.
+- The Worker is the application backend/hosting layer (no EC2/Vercel-style host).
 
-**Cloudflare steps for each environment (repeat for test, then prod):**
-1. Workers & Pages → select the target Worker/environment.
-2. Settings → Domains & Routes → Add Custom Domain.
-3. Set test to `test.shelftag.io`, set prod to `app.shelftag.io` (or apex).
-4. Confirm proxied DNS record creation in Cloudflare DNS.
-5. Wait for certificate issuance.
-6. Verify health:
-   - `https://test.shelftag.io/api/health` (test)
-   - `https://app.shelftag.io/api/health` (prod)
-7. Confirm one end-to-end sync in each environment and verify Airtable rows land in the matching base (test vs prod).
+**Live URLs**
+
+- Primary: `https://shelftag.io`
+- Direct Worker endpoint: `https://shelftagprod.jonathankim829.workers.dev`
+
+**Operational notes**
+
+- Cloudflare auto-manages the DNS records needed for the custom domain binding.
+- `workers.dev` is a separate direct endpoint, not an automatic failover path.
+
+**TL;DR:** Cloudflare is the DNS/proxy edge; the Worker serves the app.
 
 ### Testing
 
