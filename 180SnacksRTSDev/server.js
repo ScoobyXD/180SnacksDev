@@ -143,6 +143,7 @@ function cleanupOldFiles(directoryPath, matcher, keepLatest) {
 
   const candidates = fs.readdirSync(directoryPath)
     .filter((name) => matcher.test(name))
+    .filter((name) => !name.startsWith('~$'))
     .map((name) => {
       const fullPath = path.join(directoryPath, name);
       const stats = fs.statSync(fullPath);
@@ -153,8 +154,15 @@ function cleanupOldFiles(directoryPath, matcher, keepLatest) {
   const removed = [];
   const toDelete = candidates.slice(Math.max(0, keepLatest));
   for (const file of toDelete) {
-    fs.unlinkSync(file.fullPath);
-    removed.push(file.fullPath);
+    try {
+      fs.unlinkSync(file.fullPath);
+      removed.push(file.fullPath);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'EBUSY') {
+        continue;
+      }
+      throw error;
+    }
   }
 
   return removed;
@@ -172,8 +180,20 @@ function cleanupArtifacts(run) {
   const downloadsDir = path.resolve(__dirname, '..', 'IRIDev', 'artifacts', 'downloads');
   const outputDir = path.resolve(__dirname, '..', 'ExcelToAirtableDev', 'artifacts');
 
-  const removedDownloads = cleanupOldFiles(downloadsDir, /\.xlsx$/i, run.cleanup.keepLatestDownloads);
-  const removedOutputs = cleanupOldFiles(outputDir, /\.xlsx$/i, run.cleanup.keepLatestOutputs);
+  let removedDownloads = [];
+  let removedOutputs = [];
+  try {
+    removedDownloads = cleanupOldFiles(downloadsDir, /\.xlsx$/i, run.cleanup.keepLatestDownloads);
+    removedOutputs = cleanupOldFiles(outputDir, /\.xlsx$/i, run.cleanup.keepLatestOutputs);
+  } catch (error) {
+    appendLog(
+      run,
+      'cleanup',
+      'warn',
+      `Cleanup encountered an error but run output is preserved: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return;
+  }
 
   run.cleanup.removed = [...removedDownloads, ...removedOutputs];
   appendLog(run, 'cleanup', 'info', `Cleanup removed ${run.cleanup.removed.length} old .xlsx files.`);

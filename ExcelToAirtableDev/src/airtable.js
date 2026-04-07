@@ -241,10 +241,13 @@ export async function upsertRowsToAirtable(config, rows) {
   const rejects = [];
   let created = 0;
   let updated = 0;
+  let processedRows = 0;
+  let nextProgressLogAt = 500;
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
-    const batchNumber = batchIndex + 1;
+    const rowStart = batchIndex * BATCH_SIZE + 1;
+    const rowEnd = rowStart + batch.length - 1;
     try {
       // eslint-disable-next-line no-await-in-loop
       const result = await upsertBatch(config, batch);
@@ -252,17 +255,18 @@ export async function upsertRowsToAirtable(config, rows) {
       const updatedInBatch = result.updatedRecords?.length ?? 0;
       created += createdInBatch;
       updated += updatedInBatch;
+      processedRows += batch.length;
 
-      if (batchNumber === 1 || batchNumber % 50 === 0 || batchNumber === batches.length) {
+      while (processedRows >= nextProgressLogAt || processedRows === rows.length) {
         console.log(
-          `[airtable] Upserted batch ${batchNumber}/${batches.length} ` +
-          `(batch created ${createdInBatch}, batch updated ${updatedInBatch}, ` +
-          `totals created ${created}, totals updated ${updated}).`
+          `[airtable] Progress: ${processedRows}/${rows.length} rows synced ` +
+          `(created ${created}, updated ${updated}).`
         );
+        nextProgressLogAt += 500;
       }
     } catch (error) {
       console.error(
-        `[airtable] Failed batch ${batchNumber}/${batches.length}: ` +
+        `[airtable] Failed rows ${rowStart}-${rowEnd}: ` +
         `${error instanceof Error ? error.message : String(error)}`
       );
       for (let offset = 0; offset < batch.length; offset += 1) {
