@@ -17,18 +17,53 @@ compatibility_date = "2024-09-23"
 [assets]
 directory = "./frontend"
 
-# R2 bucket for storing product photos.
-# Airtable downloads images from here via presigned URLs.
-# Create the bucket first:  npx wrangler r2 bucket create shelftag-images
+# Base/default deployment target (kept as dev).
+# Use explicit environments for test/prod:
+#   npx wrangler deploy --env test
+#   npx wrangler deploy --env production
 [[r2_buckets]]
 binding = "IMAGES"
-bucket_name = "shelftag-images"
+bucket_name = "shelftag-images-dev"
 
 # Environment variables (non-secret — safe to commit)
 [vars]
 AIRTABLE_BASE_ID = "app6VXhFVBp1H215u"
 AIRTABLE_TABLE_ID = "tblvy7IdKWweV8Jdj"
+# Optional explicit image host for Airtable attachment URLs.
+# If unset, worker falls back to the request origin.
+IMAGE_BASE_URL = "https://shelftagdev.jonathankim829.workers.dev"
 
 # Secrets (set via `wrangler secret put`, NEVER in this file):
 #   GEMINI_API_KEY   — Google AI Studio API key
 #   AIRTABLE_PAT     — Airtable Personal Access Token
+
+# ============================================================================
+# TEST ENVIRONMENT
+# ============================================================================
+[env.test]
+name = "shelftagtest"
+
+[[env.test.r2_buckets]]
+binding = "IMAGES"
+bucket_name = "shelftag-images-test"
+
+[env.test.vars]
+AIRTABLE_BASE_ID = "app6VXhFVBp1H215u"
+AIRTABLE_TABLE_ID = "tblvy7IdKWweV8Jdj"
+IMAGE_BASE_URL = "https://test.shelftag.io"
+
+# ============================================================================
+# PRODUCTION ENVIRONMENT
+# ============================================================================
+[env.production]
+name = "shelftagprod"
+
+[[env.production.r2_buckets]]
+binding = "IMAGES"
+bucket_name = "shelftag-images-prod"
+
+[env.production.vars]
+# Replace with production Airtable base/table IDs if they differ from test.
+AIRTABLE_BASE_ID = "REPLACE_WITH_PROD_BASE_ID"
+AIRTABLE_TABLE_ID = "REPLACE_WITH_PROD_TABLE_ID"
+IMAGE_BASE_URL = "https://app.shelftag.io"
