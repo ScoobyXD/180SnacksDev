@@ -30,7 +30,7 @@ import { initGeolocation, getCurrentPosition } from './geo.js';
  * - Also bump CACHE_VERSION in /frontend/sw.js in the same deploy so clients refresh cache.
  * - These two version values do NOT need to share the same numeric format.
  */
-const APP_VERSION = 'v01.10';
+const APP_VERSION = 'v01.11';
 
 /**
  * iOS Safari / PWA memory guardrail:
@@ -408,18 +408,12 @@ async function loadGoogleDriveConfig() {
         const result = await response.json();
         if (result.success) {
             googleDriveConfig = result.config;
+            const driveBtn = document.getElementById('drive-btn');
+            if (driveBtn) driveBtn.classList.remove('hidden');
         }
     } catch (error) {
         console.warn('[App] Google Drive config unavailable:', error.message);
     }
-}
-
-function openPhotoSourceMenu() {
-    document.getElementById('photo-source-menu').classList.remove('hidden');
-}
-
-function closePhotoSourceMenu() {
-    document.getElementById('photo-source-menu').classList.add('hidden');
 }
 
 function openGalleryPicker() {
@@ -923,27 +917,13 @@ function setupEventHandlers() {
         slot.addEventListener('click', handleMultiSlotSelect);
     });
 
-    // Photo sources (bottom-left icon).
+    // Photo sources (bottom-left icons).
     document.getElementById('gallery-input').addEventListener('change', handleGallerySelection);
-    document.getElementById('gallery-btn').addEventListener('click', (event) => {
-        event.stopPropagation();
-        const menu = document.getElementById('photo-source-menu');
-        menu.classList.contains('hidden') ? openPhotoSourceMenu() : closePhotoSourceMenu();
-    });
-    document.getElementById('photo-source-gallery').addEventListener('click', () => {
-        closePhotoSourceMenu();
+    document.getElementById('gallery-btn').addEventListener('click', () => {
         openGalleryPicker();
     });
-    document.getElementById('photo-source-drive').addEventListener('click', async () => {
-        closePhotoSourceMenu();
+    document.getElementById('drive-btn').addEventListener('click', async () => {
         await handleGoogleDriveSelection();
-    });
-    document.addEventListener('click', (event) => {
-        const menu = document.getElementById('photo-source-menu');
-        const galleryBtn = document.getElementById('gallery-btn');
-        if (!menu || menu.classList.contains('hidden')) return;
-        if (menu.contains(event.target) || galleryBtn.contains(event.target)) return;
-        closePhotoSourceMenu();
     });
 }
 
