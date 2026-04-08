@@ -1,2 +1,4 @@
 node_modules/
 180SnacksDevCommands.txt
+.env
+**/.env
