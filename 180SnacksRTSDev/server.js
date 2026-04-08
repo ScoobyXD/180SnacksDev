@@ -9,6 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, 'public');
 const port = Number(process.env.PORT || 4010);
+const iriProjectDir = process.env.IRI_DIR || 'IRIDev';
+const excelProjectDir = process.env.EXCEL_DIR || 'ExcelToAirtableDev';
 
 const runs = new Map();
 
@@ -47,7 +49,7 @@ function createRun() {
         id: 'iridev-extract',
         label: 'IRIDev extraction',
         command: 'npm run run -- --mode=download',
-        cwd: path.resolve(__dirname, '..', 'IRIDev'),
+        cwd: path.resolve(__dirname, '..', iriProjectDir),
         status: 'pending',
         startedAt: null,
         finishedAt: null,
@@ -57,7 +59,7 @@ function createRun() {
         id: 'excel-to-airtable',
         label: 'ExcelToAirtable sync',
         command: 'npm run run',
-        cwd: path.resolve(__dirname, '..', 'ExcelToAirtableDev'),
+        cwd: path.resolve(__dirname, '..', excelProjectDir),
         status: 'pending',
         startedAt: null,
         finishedAt: null,
@@ -177,8 +179,8 @@ function cleanupArtifacts(run) {
     return;
   }
 
-  const downloadsDir = path.resolve(__dirname, '..', 'IRIDev', 'artifacts', 'downloads');
-  const outputDir = path.resolve(__dirname, '..', 'ExcelToAirtableDev', 'artifacts');
+  const downloadsDir = path.resolve(__dirname, '..', iriProjectDir, 'artifacts', 'downloads');
+  const outputDir = path.resolve(__dirname, '..', excelProjectDir, 'artifacts');
 
   let removedDownloads = [];
   let removedOutputs = [];
