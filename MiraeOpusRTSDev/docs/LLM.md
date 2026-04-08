@@ -443,6 +443,30 @@ For the gateway, every client maintains a persistent WebSocket connection. Disco
 
 ---
 
+### Superhuman — 100ms Rule and Perceived Speed
+
+#### Core Idea
+Superhuman applies the **100ms rule**: every interaction should complete in under 100 milliseconds so the product feels instantaneous. The idea is attributed to Paul Buchheit (Gmail creator).
+
+#### How Superhuman Achieves This
+Superhuman's approach combines two disciplines:
+
+1. **Continuous performance measurement** — instrument the product, track latency metrics, and identify bottlenecks quickly.
+2. **System + UX latency reduction** — apply technical best practices (e.g., local storage and caching) and interaction design choices that reduce navigation time and mental overhead.
+
+A common question is how Superhuman can feel faster than Gmail while using the same underlying Gmail APIs. The key point is that Superhuman stores useful data locally and serves UI state from cache when possible, which can keep interactions feeling fast (including some offline scenarios) even if network calls are slow.
+
+The business case is framed around cumulative time cost: many professionals spend roughly three hours per day in email, and Superhuman reports users saving meaningful time each week.
+
+#### What This Implies for RTS
+- **Adopt a hard interaction budget:** treat 100ms as the default target for high-frequency UI actions (open task, switch view, assign owner, update status).
+- **Instrument first, optimize second:** define p50/p95/p99 latency SLOs per core workflow before feature expansion.
+- **Local cache for perceived speed:** keep hot operational context (recent tasks, owners, blockers, priorities) locally available so the command view remains responsive during network jitter.
+- **Speed is product strategy:** for RTS, speed should not be a polish step; it should be a core requirement tied to operator throughput and decision quality.
+- **Design around time saved:** measure and communicate workflow time savings as a core product KPI.
+
+---
+
 ### Figma — Deep Architecture Breakdown
 
 #### Background and What Figma Is
