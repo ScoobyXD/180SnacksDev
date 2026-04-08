@@ -45,8 +45,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, 'public');
 const port = Number(process.env.PORT || 4010);
-const iriProjectDir = process.env.IRI_DIR || 'IRIDev';
-const excelProjectDir = process.env.EXCEL_DIR || 'ExcelToAirtableDev';
+const iriProjectDir = process.env.IRI_DIR;
+const excelProjectDir = process.env.EXCEL_DIR;
 
 const runs = new Map();
 
