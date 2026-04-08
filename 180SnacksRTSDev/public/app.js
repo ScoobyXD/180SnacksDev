@@ -9,17 +9,11 @@ const branchTree = document.getElementById('branchTree');
 const pipelineGroup = document.getElementById('pipelineGroup');
 const canvas = document.getElementById('canvas');
 const world = document.getElementById('world');
-const chatMessagesEl = document.getElementById('chatMessages');
-const chatForm = document.getElementById('chatForm');
-const chatInput = document.getElementById('chatInput');
-const chatUser = document.getElementById('chatUser');
 
 let currentRunId = null;
 let pollTimer = null;
 let widgetDragPointerId = null;
 let latestRenderedLogsText = '';
-let chatPollTimer = null;
-let latestChatSignature = '';
 
 const pan = {
   x: -4900,
@@ -58,70 +52,6 @@ function setUploadCheck({ text, tone = 'neutral' }) {
 function tickClock() {
   const now = new Date();
   clockEl.textContent = now.toLocaleTimeString();
-}
-
-function renderChatMessages(messages = []) {
-  if (!messages.length) {
-    latestChatSignature = '';
-    chatMessagesEl.textContent = 'No messages yet.';
-    return;
-  }
-
-  const lines = messages
-    .slice(-50)
-    .map((message) => `[${new Date(message.at).toLocaleTimeString()}] ${message.user}: ${message.text}`);
-  const signature = lines.join('\n');
-  if (signature === latestChatSignature) {
-    return;
-  }
-
-  latestChatSignature = signature;
-  chatMessagesEl.textContent = signature;
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-}
-
-async function fetchMessages() {
-  const response = await fetch('/api/messages');
-  if (!response.ok) {
-    throw new Error('Could not load messages.');
-  }
-  return response.json();
-}
-
-async function refreshMessages() {
-  try {
-    const payload = await fetchMessages();
-    renderChatMessages(payload.messages || []);
-  } catch (error) {
-    chatMessagesEl.textContent = error instanceof Error ? error.message : 'Failed to load messages.';
-  }
-}
-
-async function sendMessage(event) {
-  event.preventDefault();
-  const text = chatInput.value.trim();
-  const user = chatUser.value;
-  if (!text) {
-    return;
-  }
-
-  try {
-    const response = await fetch('/api/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user, text })
-    });
-
-    if (!response.ok) {
-      const payload = await response.json();
-      throw new Error(payload?.error || 'Could not send message.');
-    }
-
-    chatInput.value = '';
-    await refreshMessages();
-  } catch (error) {
-    setStatus(error instanceof Error ? error.message : 'Could not send message.');
-  }
 }
 
 function showRuntimeWidgets() {
@@ -366,9 +296,6 @@ canvas.addEventListener('wheel', (event) => {
 
 runButton.addEventListener('click', startRun);
 copyLogsButton.addEventListener('click', copyLogsToClipboard);
-chatForm.addEventListener('submit', sendMessage);
 setInterval(tickClock, 1000);
-chatPollTimer = setInterval(refreshMessages, 1000);
 applyPan();
 tickClock();
-refreshMessages();

@@ -11,8 +11,6 @@ const publicDir = path.join(__dirname, 'public');
 const port = Number(process.env.PORT || 4010);
 
 const runs = new Map();
-const messages = [];
-const MAX_MESSAGES = 200;
 
 function json(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -21,34 +19,6 @@ function json(res, statusCode, payload) {
     'Cache-Control': 'no-store'
   });
   res.end(body);
-}
-
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let raw = '';
-    req.on('data', (chunk) => {
-      raw += String(chunk);
-      if (raw.length > 1024 * 1024) {
-        reject(new Error('Body too large'));
-      }
-    });
-    req.on('end', () => {
-      if (!raw) {
-        resolve({});
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(raw);
-        resolve(parsed);
-      } catch (error) {
-        reject(new Error('Invalid JSON body'));
-      }
-    });
-    req.on('error', (error) => {
-      reject(error);
-    });
-  });
 }
 
 function sanitizeRun(run) {
@@ -308,42 +278,6 @@ const server = http.createServer(async (req, res) => {
       .map(sanitizeRun);
     json(res, 200, { runs: list });
     return;
-  }
-
-  if (req.method === 'GET' && req.url === '/api/messages') {
-    json(res, 200, { messages });
-    return;
-  }
-
-  if (req.method === 'POST' && req.url === '/api/messages') {
-    try {
-      const payload = await readJsonBody(req);
-      const user = String(payload?.user ?? '').trim();
-      const text = String(payload?.text ?? '').trim();
-
-      if (!user || !text) {
-        json(res, 400, { error: 'Both user and text are required.' });
-        return;
-      }
-
-      const message = {
-        id: crypto.randomUUID(),
-        user: user.slice(0, 40),
-        text: text.slice(0, 500),
-        at: new Date().toISOString()
-      };
-
-      messages.push(message);
-      if (messages.length > MAX_MESSAGES) {
-        messages.splice(0, messages.length - MAX_MESSAGES);
-      }
-
-      json(res, 201, message);
-      return;
-    } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'Invalid request body' });
-      return;
-    }
   }
 
   if (req.method === 'GET' && req.url.startsWith('/api/runs/')) {
