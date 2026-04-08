@@ -647,3 +647,36 @@ This proactive approach — reviewing scale trends before they become crises —
 - **Move client-side computation to server-side before it breaks.** Monday.com's board rendering crashed at 20K items because all computation was client-side. For RTS, if the operational dashboard does any filtering/aggregation, do it server-side (or in a hybrid engine) from the start rather than sending all data to the browser.
 
 ---
+
+## Implementation Decision (April 8, 2026)
+
+### Language and Stack Decision for MiraeOpus MVP
+
+Based on the architecture comparisons above (Slack, Linear, Front, Discord, Datadog, Notion, Figma), MiraeOpus should use a **Go-first backend** and **PostgreSQL-first data model** for the MVP and early scale phase.
+
+**Decision:**
+- Frontend: React + TypeScript
+- Backend (primary): Go
+- Backend (selective later use): Rust only for proven hot paths
+- Database: AWS RDS PostgreSQL
+- Queue/event layer: SQS (early), Kafka only when volume demands it
+
+### Why not Go + Rust from day one?
+
+Using two backend languages too early increases complexity in:
+- deployment pipelines,
+- on-call/debugging workflows,
+- hiring/onboarding,
+- code ownership boundaries.
+
+Early-stage teams should keep one backend language for most services. Introduce Rust only when measurable bottlenecks justify it.
+
+### Clean mixed-language rule (future)
+
+When Rust is introduced, keep boundaries strict:
+1. Go owns core product services (auth, messaging, tasks, email orchestration).
+2. Rust runs isolated services for specific heavy workloads.
+3. Services communicate via HTTP/gRPC + queue, not shared in-process coupling.
+4. Keep separate SLAs and deployment paths per service.
+
+This keeps velocity high now while preserving a path to high performance later.
