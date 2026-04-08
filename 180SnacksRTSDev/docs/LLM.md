@@ -17,6 +17,8 @@ This project is intentionally a thin orchestration/UI layer, not the place for r
   - `IRI_DIR` (default: `IRIDev`)
   - `EXCEL_DIR` (default: `ExcelToAirtableDev`)
   This allows Dev→Prod folder-copy workflows without code edits when folder names change.
+- `server.js` loads a committed `.envsoft` file from the RTS project root on startup for non-secret defaults (for example: folder names like `IRIDev` / `IRIProd`).
+- `server.js` then loads local `.env` (if present) so private per-machine overrides can stay out of git.
 - Cleanup at end of every run (success or failure):
   - Delete `.xlsx` in `${IRI_DIR}/artifacts/downloads` (or default `IRIDev/...`)
   - Delete `.xlsx` in `${EXCEL_DIR}/artifacts` (or default `ExcelToAirtableDev/...`)
