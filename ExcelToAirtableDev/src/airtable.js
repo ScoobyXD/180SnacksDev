@@ -241,7 +241,7 @@ export async function upsertRowsToAirtable(config, rows) {
   const rejects = [];
   let created = 0;
   let updated = 0;
-  let processedRows = 0;
+  let syncedRows = 0;
   let nextProgressLogAt = 500;
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
@@ -255,14 +255,16 @@ export async function upsertRowsToAirtable(config, rows) {
       const updatedInBatch = result.updatedRecords?.length ?? 0;
       created += createdInBatch;
       updated += updatedInBatch;
-      processedRows += batch.length;
+      syncedRows = created + updated;
 
-      while (processedRows >= nextProgressLogAt || processedRows === rows.length) {
+      if (syncedRows >= nextProgressLogAt || syncedRows === rows.length) {
         console.log(
-          `[airtable] Progress: ${processedRows}/${rows.length} rows synced ` +
+          `[airtable] Progress: ${syncedRows}/${rows.length} rows synced ` +
           `(created ${created}, updated ${updated}).`
         );
-        nextProgressLogAt += 500;
+        while (syncedRows >= nextProgressLogAt) {
+          nextProgressLogAt += 500;
+        }
       }
     } catch (error) {
       console.error(
