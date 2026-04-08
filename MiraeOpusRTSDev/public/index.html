@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MiraeOpus Messaging MVP (Go + Postgres)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+      input, textarea, button { width: 100%; padding: 0.6rem; font-size: 1rem; }
+      textarea { min-height: 80px; }
+      #messages { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; min-height: 320px; max-height: 420px; overflow: auto; }
+      .msg { border-bottom: 1px solid #eee; padding: 0.5rem 0; }
+      .msg:last-child { border-bottom: none; }
+      .meta { color: #555; font-size: 0.85rem; }
+      .me { background: #f7fbff; }
+      .status { margin: 0.5rem 0 1rem; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>MiraeOpus Messaging MVP (Go backend)</h1>
+    <p>React comes next; this is a minimal browser client for the Go API + WebSocket service.</p>
+
+    <div class="row">
+      <label>
+        Your username
+        <input id="me" placeholder="alice" />
+      </label>
+      <label>
+        Chat with username
+        <input id="other" placeholder="bob" />
+      </label>
+    </div>
+
+    <button id="connect">Connect Chat</button>
+    <p class="status" id="status">Disconnected.</p>
+
+    <section id="messages"></section>
+
+    <div>
+      <label>
+        Message
+        <textarea id="body" placeholder="Type message..."></textarea>
+      </label>
+      <button id="send">Send</button>
+    </div>
+
+    <script>
+      const meEl = document.getElementById('me');
+      const otherEl = document.getElementById('other');
+      const bodyEl = document.getElementById('body');
+      const messagesEl = document.getElementById('messages');
+      const statusEl = document.getElementById('status');
+      const connectBtn = document.getElementById('connect');
+      const sendBtn = document.getElementById('send');
+      let ws = null;
+      let lastId = 0;
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function renderMessage(msg) {
+        if (msg.id <= lastId) return;
+        lastId = msg.id;
+
+        const div = document.createElement('div');
+        div.className = `msg ${msg.fromUser === meEl.value.trim().toLowerCase() ? 'me' : ''}`;
+        const time = new Date(msg.createdAt).toLocaleTimeString();
+        div.innerHTML = `
+          <div><strong>${msg.fromUser}</strong>: ${msg.body}</div>
+          <div class="meta">to ${msg.toUser} · ${time} · #${msg.id}</div>
+        `;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      async function loadHistory() {
+        const me = meEl.value.trim();
+        const other = otherEl.value.trim();
+        const res = await fetch(`/api/messages?userA=${encodeURIComponent(me)}&userB=${encodeURIComponent(other)}&sinceId=0`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || String(res.status));
+        }
+        const data = await res.json();
+        messagesEl.innerHTML = '';
+        lastId = 0;
+        data.messages.forEach(renderMessage);
+      }
+
+      function connect() {
+        const me = meEl.value.trim();
+        const other = otherEl.value.trim();
+        if (!me || !other) {
+          setStatus('Enter both usernames.');
+          return;
+        }
+
+        if (ws) ws.close();
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${proto}//${window.location.host}/ws?me=${encodeURIComponent(me)}&other=${encodeURIComponent(other)}`);
+
+        ws.onopen = async () => {
+          setStatus('WebSocket connected.');
+          await loadHistory();
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'message:new') {
+              renderMessage(payload.message);
+            }
+          } catch (e) {
+            setStatus(`Bad socket payload: ${e.message}`);
+          }
+        };
+
+        ws.onclose = () => setStatus('WebSocket disconnected.');
+        ws.onerror = () => setStatus('WebSocket error.');
+      }
+
+      async function send() {
+        const fromUser = meEl.value.trim();
+        const toUser = otherEl.value.trim();
+        const body = bodyEl.value.trim();
+        if (!fromUser || !toUser || !body) {
+          setStatus('Need from user, to user, and message body.');
+          return;
+        }
+
+        const res = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ fromUser, toUser, body })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setStatus(`Send failed: ${err.error || res.status}`);
+          return;
+        }
+
+        bodyEl.value = '';
+      }
+
+      connectBtn.addEventListener('click', connect);
+      sendBtn.addEventListener('click', send);
+    </script>
+  </body>
+</html>
