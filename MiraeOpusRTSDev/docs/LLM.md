@@ -658,7 +658,7 @@ Based on the architecture comparisons above (Slack, Linear, Front, Discord, Data
 - Frontend: React + TypeScript
 - Backend (primary): Go
 - Backend (selective later use): Rust only for proven hot paths
-- Database: AWS RDS PostgreSQL
+- Database: AWS RDS PostgreSQL (Aurora)
 - Queue/event layer: SQS (early), Kafka only when volume demands it
 
 ### Why not Go + Rust from day one?
