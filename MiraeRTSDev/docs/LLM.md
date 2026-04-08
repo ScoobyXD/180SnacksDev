@@ -680,3 +680,11 @@ When Rust is introduced, keep boundaries strict:
 4. Keep separate SLAs and deployment paths per service.
 
 This keeps velocity high now while preserving a path to high performance later.
+
+### AWS Cost Governance Rule (Operator Discipline)
+
+Tag, tag, and tag.
+
+Track which teams are using what and set budgets. Destroy things that are not tagged or don't have an owner.
+
+You build it, you run it, you pay for it.
