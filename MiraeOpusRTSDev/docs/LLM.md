@@ -23,6 +23,78 @@ RTS should function as:
 3. **Executive command view** for managers/CEOs to understand what is happening now without depending on manual dashboard updates.
 4. **Automation layer** via microservices that can execute repetitive workflows and expose progress to all stakeholders.
 
+## RTS Communication Baseline (HTTPS + Secure Realtime)
+HTTPS is not hard to do, and RTS should treat it as mandatory from day one.
+
+Recommended transport model:
+
+1. **HTTPS for all request/response APIs** (REST/GraphQL/internal APIs), with TLS termination at the edge.
+2. **WSS (WebSocket over TLS)** for real-time updates and command-view subscriptions.
+3. **mTLS for service-to-service traffic** where practical (or equivalent identity-based mesh policy).
+4. **Signed, short-lived tokens** for client auth; avoid long-lived bearer tokens in browser storage.
+
+Minimum security baseline:
+- Enforce TLS 1.2+ everywhere (prefer TLS 1.3 where available).
+- Redirect HTTP → HTTPS at the edge with HSTS.
+- Issue and rotate certificates automatically (ACME/cloud managed certs).
+- Keep tenant context (`tenant_id`) in auth claims and enforce it in every access path.
+
+Operationally, this is mostly solved infrastructure now (load balancer, cert manager, reverse proxy). The hard part is not "turning on HTTPS"; it's consistently enforcing identity, authorization, and tenant isolation behind it.
+
+## RTS MVP Blueprint (What to Build First)
+
+### MVP Goal
+Prove one clear value loop: **incoming cross-channel signals become owned, trackable, and visible execution state in real time**.
+
+### MVP Scope (8–12 weeks)
+Build only these core workflows:
+1. **Ingest** from 1–2 channels (e.g., Slack + email webhook/API).
+2. **Normalize** into the RTS canonical model (`event`, `entity`, `owner`, `deadline`, `outcome`, etc.).
+3. **Triage + assignment UI** for operations leads/managers.
+4. **Live command view** for urgent items, blockers, and SLA risk.
+5. **Audit timeline** of who changed what and when.
+6. **Basic automation**: status nudges/escalations on missed SLA.
+
+Everything else (advanced AI orchestration, multi-region cells, heavy analytics) is explicitly out-of-scope for MVP.
+
+### Recommended MVP Architecture
+- **Frontend**: Next.js web app (browser-based) with keyboard-first workflows.
+- **API**: Next.js API routes or lightweight service layer.
+- **Primary DB**: PostgreSQL as source of truth.
+- **Cache/ephemeral**: Redis for rate limits, presence-ish data, hot lookups.
+- **Queue**: managed queue/stream for async processing of ingested events.
+- **Realtime**: WSS or SSE for command-view updates.
+- **Auth**: SSO-ready auth provider with short-lived tokens and strict tenant claims.
+
+### Hosting Recommendation for miraeopus.com
+For MVP, use a **hybrid of Vercel + Cloudflare**:
+
+1. **Cloudflare**: DNS for `miraeopus.com`, TLS, WAF, bot protection, edge caching.
+2. **Vercel**: host the Next.js app and API quickly with strong developer velocity.
+3. **Managed Postgres** (Neon/Supabase/RDS) + managed Redis + managed queue.
+
+Why this is practical:
+- Fastest path to a polished product and production HTTPS.
+- Good global performance and operational simplicity for a small team.
+- Easy to swap/expand components later without rewriting product logic.
+
+If the team prefers one-vendor operations, Cloudflare-first is possible, but Vercel usually gives faster product iteration for a React/Next MVP.
+
+### Is PostgreSQL Still the Right Choice at Hypothetical Billion-Event Scale?
+**Yes for system-of-record, with a scale path.**
+
+Postgres should remain the transactional source for core entities and decisions for a long time. At very high scale, the architecture evolves around Postgres rather than replacing it outright:
+
+1. **Phase 1**: Single Postgres + read replicas.
+2. **Phase 2**: Partitioning + workload isolation + caching.
+3. **Phase 3**: Tenant/workspace sharding (logical then physical).
+4. **Phase 4**: Dedicated systems for heavy workloads:
+   - search index for full-text,
+   - analytics/lakehouse for BI/agent context,
+   - stream/event infrastructure for ingestion fan-out.
+
+Decision principle: keep Postgres for correctness-critical transactional state; move specialized query and scale workloads to purpose-built systems.
+
 ## Why This Is Differentiated
 The value is not only aggregating channels. The key is transforming fragmented communications into executable operational state:
 
@@ -440,6 +512,30 @@ For the gateway, every client maintains a persistent WebSocket connection. Disco
 - **Don't fight garbage collection — avoid it.** Discord's move from JVM-based Cassandra to C++-based ScyllaDB eliminated their biggest source of on-call incidents. For RTS, prefer databases and runtimes without GC-related latency spikes.
 - **Rust is the performance escape hatch.** When your primary language (Elixir, Python, Node) hits performance limits on specific data structures or I/O patterns, Rust can be surgically applied to those hot paths without rewriting everything.
 - **Start with the simplest database, then migrate when forced.** MongoDB → Cassandra → ScyllaDB. Each migration happened because the previous system was genuinely failing at the new scale, not preemptively. For RTS MVP, Postgres is the right start.
+
+---
+
+### Superhuman — 100ms Rule and Perceived Speed
+
+#### Core Idea
+Superhuman applies the **100ms rule**: every interaction should complete in under 100 milliseconds so the product feels instantaneous. The idea is attributed to Paul Buchheit (Gmail creator).
+
+#### How Superhuman Achieves This
+Superhuman's approach combines two disciplines:
+
+1. **Continuous performance measurement** — instrument the product, track latency metrics, and identify bottlenecks quickly.
+2. **System + UX latency reduction** — apply technical best practices (e.g., local storage and caching) and interaction design choices that reduce navigation time and mental overhead.
+
+A common question is how Superhuman can feel faster than Gmail while using the same underlying Gmail APIs. The key point is that Superhuman stores useful data locally and serves UI state from cache when possible, which can keep interactions feeling fast (including some offline scenarios) even if network calls are slow.
+
+The business case is framed around cumulative time cost: many professionals spend roughly three hours per day in email, and Superhuman reports users saving meaningful time each week.
+
+#### What This Implies for RTS
+- **Adopt a hard interaction budget:** treat 100ms as the default target for high-frequency UI actions (open task, switch view, assign owner, update status).
+- **Instrument first, optimize second:** define p50/p95/p99 latency SLOs per core workflow before feature expansion.
+- **Local cache for perceived speed:** keep hot operational context (recent tasks, owners, blockers, priorities) locally available so the command view remains responsive during network jitter.
+- **Speed is product strategy:** for RTS, speed should not be a polish step; it should be a core requirement tied to operator throughput and decision quality.
+- **Design around time saved:** measure and communicate workflow time savings as a core product KPI.
 
 ---
 
