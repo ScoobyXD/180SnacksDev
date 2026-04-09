@@ -1,0 +1,24 @@
+{
+  "name": "cds-extract-dev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "auth:setup": "node --loader ts-node/esm src/authSetup.ts",
+    "record:auth": "node -e \"require('fs').mkdirSync('generated',{recursive:true})\" && playwright codegen --target=playwright-test --output=generated/cds.codegen.spec.ts --load-storage=playwright/.auth/cds.json https://portal-cdsus.demosystem.net/#/",
+    "download:run": "node --loader ts-node/esm src/downloadFromAuth.ts",
+    "typecheck": "tsc --noEmit",
+    "pw:install": "playwright install chromium",
+    "run": "playwright test generated/cds.codegen.spec.ts --headed --workers=1",
+    "run:once": "playwright test generated/cds.codegen.spec.ts --headed --workers=1",
+    "run:debug": "playwright test generated/cds.codegen.spec.ts --headed --workers=1 --debug"
+  },
+  "dependencies": {
+    "playwright": "^1.59.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "@playwright/test": "^1.59.0"
+  }
+}
