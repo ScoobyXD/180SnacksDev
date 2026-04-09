@@ -24,8 +24,8 @@ Run these from `ServicesDev/AccrualsDev/CDSExtractDev`.
 4. Record authenticated workflow into generated spec:
    - `npm run record:auth`
    - When done recording, close the codegen browser window (or stop the command).
-5. Run the generated Playwright test file directly:
-   - `npm run test:generated`
+5. Run the generated Playwright file:
+   - `npm run run`
 6. Run an authenticated session that waits for a download and saves it:
    - `npm run download:run`
 
@@ -36,5 +36,6 @@ Run these from `ServicesDev/AccrualsDev/CDSExtractDev`.
 
 ## Notes
 - `record:auth` uses Playwright codegen with `--load-storage` so recording starts logged in.
-- You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run test:generated`.
+- You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run run`.
 - `download:run` intentionally opens headed Chromium and waits for any download event from the authenticated context.
+- `playwright.config.ts` sets `testDir` to `generated`, so `npm run run` picks up your recorded `*.spec.ts` files (fixes the "No tests found" issue).
