@@ -24,14 +24,16 @@ Run these from `ServicesDev/AccrualsDev/DeacomExtractDev`.
 4. Record authenticated workflow into generated spec:
    - `npm run record:auth`
    - When done recording, close the codegen browser window (or stop the command).
-5. Run from the unified runner (defaults to the recorded script mode):
+5. Run from the unified runner (defaults to Deacom scripted flow in `src/index.ts`):
    - `npm run run`
-6. Run explicit recorded-script mode (headed Playwright run of your generated spec):
+6. Run explicit recorded-script mode (same as step 5):
    - `npm run run -- --mode=recorded`
-7. Run download mode (IRI-style flow) to open authenticated Chromium and persist the first download event:
+7. Run generated codegen spec directly (Playwright test runner):
+   - `npm run run:generated`
+8. Run download mode (authenticated browser waiting for first download event):
    - `npm run run -- --mode=download`
    - (Alias still available: `npm run run:download` and `npm run download:run`)
-8. Run generated script in headed debug mode (Inspector / step-through):
+9. Run generated script in headed debug mode (Inspector / step-through):
    - `npm run run:debug`
 
 ## Auth + artifacts
@@ -41,8 +43,9 @@ Run these from `ServicesDev/AccrualsDev/DeacomExtractDev`.
 
 ## Notes
 - `record:auth` uses Playwright codegen with `--load-storage` so recording starts logged in.
-- You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run run`.
+- You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run run:generated`.
 - `run -- --mode=download` (and alias `download:run`) intentionally opens headed Chromium and waits for any download event from the authenticated context.
 - `playwright.config.ts` sets `testDir` to `generated`, so run commands pick up your recorded `*.spec.ts` files (fixes the "No tests found" issue).
-- `npm run run` now routes through `src/index.ts` and matches IRIDev style mode switching (`recorded` vs `download`).
+- `npm run run` now routes through `src/index.ts`; in `recorded` mode, edit the `GENERATED STEPS SECTION` in that file by copy/pasting your codegen output.
+- `src/index.ts` includes the Deacom sidebar-prime workaround and an explicit one-second pause (`await page.waitForTimeout(1000)`) before navigation.
 - Downloads are configured to persist to `artifacts/downloads` via `playwright.config.ts` launch options.

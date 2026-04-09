@@ -12,7 +12,8 @@
     "run": "node --loader ts-node/esm src/index.ts",
     "run:once": "node --loader ts-node/esm src/index.ts --mode=recorded",
     "run:debug": "playwright test generated/deacom.codegen.spec.ts --headed --workers=1 --debug",
-    "run:download": "node --loader ts-node/esm src/index.ts --mode=download"
+    "run:download": "node --loader ts-node/esm src/index.ts --mode=download",
+    "run:generated": "playwright test generated/deacom.codegen.spec.ts --headed --workers=1"
   },
   "dependencies": {
     "playwright": "^1.59.0"
