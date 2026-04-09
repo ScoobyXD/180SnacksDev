@@ -3,49 +3,26 @@
 ## Purpose
 DeacomExtractDev is the Deacom ERP-side extractor microservice under `ServicesDev/AccrualsDev`.
 
-This service owns:
-- Saving authenticated Playwright storage state for Deacom.
-- Recording Deacom UI workflows from authenticated state.
-- Capturing Excel downloads into a service-local artifacts folder.
-
-## Portal
-- Deacom portal URL: `http://192.168.1.7:8081/`
-
 ## Commands
 Run these from `ServicesDev/AccrualsDev/DeacomExtractDev`.
 
-1. Install dependencies:
-   - `npm install`
-2. Install Playwright browser runtime:
-   - `npm run pw:install`
-3. (One-time or when session expires) Create auth state:
+1. Setup authenticated storage state:
    - `npm run auth:setup`
-   - Login/MFA in the opened browser, then press **Enter in terminal** to save auth state.
-4. Record authenticated workflow into generated spec:
+2. Record/update your generated Playwright steps:
    - `npm run record:auth`
-   - When done recording, close the codegen browser window (or stop the command).
-5. Run from the unified runner (defaults to Deacom scripted flow in `src/index.ts`):
+3. Run the maintained Deacom script:
    - `npm run run`
-6. Run explicit recorded-script mode (same as step 5):
-   - `npm run run -- --mode=recorded`
-7. Run generated codegen spec directly (Playwright test runner):
-   - `npm run run:generated`
-8. Run download mode (authenticated browser waiting for first download event):
-   - `npm run run -- --mode=download`
-   - (Alias still available: `npm run run:download` and `npm run download:run`)
-9. Run generated script in headed debug mode (Inspector / step-through):
-   - `npm run run:debug`
 
-## Auth + artifacts
+## How `npm run run` works
+- It executes `src/index.mjs` directly (no ts-node loader).
+- It loads auth from `playwright/.auth/deacom.json`.
+- It applies the sidebar-prime workaround (`wakeSidebar`) so hidden Deacom labels become available.
+- It includes an explicit manual delay (`await page.waitForTimeout(1000)`).
+- The **GENERATED STEPS SECTION** in `src/index.mjs` is where you copy/paste updated codegen steps.
+- Downloads are persisted to `artifacts/downloads`.
+
+## Key paths
 - Auth file: `playwright/.auth/deacom.json`
 - Codegen output: `generated/deacom.codegen.spec.ts`
+- Scripted runner: `src/index.mjs`
 - Download output: `artifacts/downloads/*`
-
-## Notes
-- `record:auth` uses Playwright codegen with `--load-storage` so recording starts logged in.
-- You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run run:generated`.
-- `run -- --mode=download` (and alias `download:run`) intentionally opens headed Chromium and waits for any download event from the authenticated context.
-- `playwright.config.ts` sets `testDir` to `generated`, so run commands pick up your recorded `*.spec.ts` files (fixes the "No tests found" issue).
-- `npm run run` now routes through `src/index.ts`; in `recorded` mode, edit the `GENERATED STEPS SECTION` in that file by copy/pasting your codegen output.
-- `src/index.ts` includes the Deacom sidebar-prime workaround and an explicit one-second pause (`await page.waitForTimeout(1000)`) before navigation.
-- Downloads are configured to persist to `artifacts/downloads` via `playwright.config.ts` launch options.
