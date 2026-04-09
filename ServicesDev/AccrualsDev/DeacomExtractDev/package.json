@@ -9,9 +9,9 @@
     "download:run": "node --loader ts-node/esm src/downloadFromAuth.ts",
     "typecheck": "tsc --noEmit",
     "pw:install": "playwright install chromium",
-    "run": "playwright test --ui",
-    "run:once": "playwright test --headed",
-    "run:debug": "playwright test --headed --debug"
+    "run": "playwright test generated/deacom.codegen.spec.ts --headed --workers=1",
+    "run:once": "playwright test generated/deacom.codegen.spec.ts --headed --workers=1",
+    "run:debug": "playwright test generated/deacom.codegen.spec.ts --headed --workers=1 --debug"
   },
   "dependencies": {
     "playwright": "^1.59.0"

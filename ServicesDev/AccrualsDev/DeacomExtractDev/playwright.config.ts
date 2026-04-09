@@ -5,5 +5,12 @@ export default defineConfig({
   testMatch: '*.spec.ts',
   timeout: 120_000,
   fullyParallel: false,
-  reporter: 'list'
+  reporter: 'list',
+  use: {
+    acceptDownloads: true,
+    launchOptions: {
+      slowMo: 80,
+      downloadsPath: 'artifacts/downloads'
+    }
+  }
 });
