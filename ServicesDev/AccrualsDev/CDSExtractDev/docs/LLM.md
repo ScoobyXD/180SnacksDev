@@ -24,12 +24,15 @@ Run these from `ServicesDev/AccrualsDev/CDSExtractDev`.
 4. Record authenticated workflow into generated spec:
    - `npm run record:auth`
    - When done recording, close the codegen browser window (or stop the command).
-5. Run the exact generated script live in a headed browser:
+5. Run from the unified runner (defaults to the recorded script mode):
    - `npm run run`
-6. Run generated script in headed debug mode (Inspector / step-through):
+6. Run explicit recorded-script mode (headed Playwright run of your generated spec):
+   - `npm run run -- --mode=recorded`
+7. Run download mode (IRI-style flow) to open authenticated Chromium and persist the first download event:
+   - `npm run run -- --mode=download`
+   - (Alias still available: `npm run run:download` and `npm run download:run`)
+8. Run generated script in headed debug mode (Inspector / step-through):
    - `npm run run:debug`
-7. Run an authenticated session that waits for a download and saves it:
-   - `npm run download:run`
 
 ## Auth + artifacts
 - Auth file: `playwright/.auth/cds.json`
@@ -39,7 +42,7 @@ Run these from `ServicesDev/AccrualsDev/CDSExtractDev`.
 ## Notes
 - `record:auth` uses Playwright codegen with `--load-storage` so recording starts logged in.
 - You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run run`.
-- `download:run` intentionally opens headed Chromium and waits for any download event from the authenticated context.
+- `run -- --mode=download` (and alias `download:run`) intentionally opens headed Chromium and waits for any download event from the authenticated context.
 - `playwright.config.ts` sets `testDir` to `generated`, so run commands pick up your recorded `*.spec.ts` files (fixes the "No tests found" issue).
-- `npm run run` executes your generated spec file directly in headed mode (not Playwright UI mode).
+- `npm run run` now routes through `src/index.ts` and matches IRIDev style mode switching (`recorded` vs `download`).
 - Downloads are configured to persist to `artifacts/downloads` via `playwright.config.ts` launch options.
