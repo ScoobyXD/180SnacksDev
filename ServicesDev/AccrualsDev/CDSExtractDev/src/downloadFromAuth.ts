@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Download } from 'playwright';
 
-const cdsUrl = 'https://www.costco.com/';
+const cdsUrl = 'https://portal-cdsus.demosystem.net/#/';
 const authPath = path.join('playwright', '.auth', 'cds.json');
 const downloadsDir = path.join('artifacts', 'downloads');
 

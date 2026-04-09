@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Download } from 'playwright';
 
-const deacomUrl = 'https://customer.deacom.com/';
+const deacomUrl = 'http://192.168.1.7:8081/';
 const authPath = path.join('playwright', '.auth', 'deacom.json');
 const downloadsDir = path.join('artifacts', 'downloads');
 
