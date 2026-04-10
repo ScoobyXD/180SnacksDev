@@ -3,43 +3,51 @@
 ## Purpose
 DeacomExtractDev is the Deacom ERP-side extractor microservice under `ServicesDev/AccrualsDev`.
 
-This service owns:
-- Saving authenticated Playwright storage state for Deacom.
-- Recording Deacom UI workflows from authenticated state.
-- Capturing Excel downloads into a service-local artifacts folder.
-
-## Portal
-- Deacom portal URL: `http://192.168.1.7:8081/`
-
 ## Commands
 Run these from `ServicesDev/AccrualsDev/DeacomExtractDev`.
 
-1. Install dependencies:
-   - `npm install`
-2. Install Playwright browser runtime:
-   - `npm run pw:install`
-3. (One-time or when session expires) Create auth state:
+1. Setup authenticated storage state:
    - `npm run auth:setup`
-   - Login/MFA in the opened browser, then press **Enter in terminal** to save auth state.
-4. Record authenticated workflow into generated spec:
+2. Record/update your generated Playwright steps:
    - `npm run record:auth`
-   - When done recording, close the codegen browser window (or stop the command).
-5. Run the exact generated script live in a headed browser:
+3. Run the maintained Deacom script:
    - `npm run run`
-6. Run generated script in headed debug mode (Inspector / step-through):
-   - `npm run run:debug`
-7. Run an authenticated session that waits for a download and saves it:
-   - `npm run download:run`
 
-## Auth + artifacts
+## How `npm run run` works
+- It executes `src/index.mjs` directly (no ts-node loader).
+- It loads auth from `playwright/.auth/deacom.json`.
+- It applies the sidebar-prime workaround (`wakeSidebar`) so hidden Deacom labels become available.
+- It uses resilient `openSalesMenu`/`openSalesAndClickOrderReporting` routines (DOM-id selectors like `#Menu_Sales`, hover-first open attempts, delayed clicks, physical mouse fallback, keyboard fallback, retry cycles) before choosing **Order Reporting**.
+- If Sales still does not expand, the runner captures a debug screenshot to `artifacts/screenshots/` and throws.
+- It includes an explicit manual delay (`await page.waitForTimeout(1000)`).
+- The **GENERATED STEPS SECTION** in `src/index.mjs` is where you copy/paste updated codegen steps.
+- Downloads are persisted to `artifacts/downloads`.
+
+## Deacom quirks learned (important)
+- **Sidebar text is hover-driven and misleading in DOM**:
+  - Menu label spans exist in DOM with inline style like `display: none`.
+  - Labels visually appear only after hover/mouse movement across the sidebar.
+  - Because of this, role/text-only locators can be flaky at initial load; prefer stable IDs (example: `#Menu_Sales`).
+- **“Sales turned orange” does not always mean submenu opened**:
+  - Deacom can accept focus/selected styling but still fail to open `#Menu_Links_Sales`.
+  - We therefore treat success as **`Order Reporting` being visible**, not color/state of Sales.
+- **Hover timing matters**:
+  - Fast synthetic click can miss the submenu-open handler.
+  - Runner intentionally performs hover-first attempts, delayed clicks, and slight mouse drift to trigger `mouseenter`/`mouseover` style logic.
+- **Event sequencing can look weird but is intentional**:
+  - You may see cursor movement around nearby icons (for example around CRM/Sales region) before final Sales open.
+  - This is part of the retry strategy to trigger Deacom’s hover-driven UI state machine.
+- **If menu still fails, collect artifacts**:
+  - Runner writes screenshots to `artifacts/screenshots/` when Sales or Order Reporting cannot be opened.
+  - Keep those files with console attempt logs when debugging future regressions.
+
+## Maintenance rule of thumb
+- Keep `openSalesMenu` and `openSalesAndClickOrderReporting` intact unless Deacom UI behavior materially changes.
+- Update only the **GENERATED STEPS SECTION** first when re-recording.
+- If regressions return, inspect live DOM IDs before changing locator strategy.
+
+## Key paths
 - Auth file: `playwright/.auth/deacom.json`
 - Codegen output: `generated/deacom.codegen.spec.ts`
+- Scripted runner: `src/index.mjs`
 - Download output: `artifacts/downloads/*`
-
-## Notes
-- `record:auth` uses Playwright codegen with `--load-storage` so recording starts logged in.
-- You do **not** need to copy/paste code into another file to run the generated workflow; run the generated spec as-is with `npm run run`.
-- `download:run` intentionally opens headed Chromium and waits for any download event from the authenticated context.
-- `playwright.config.ts` sets `testDir` to `generated`, so run commands pick up your recorded `*.spec.ts` files (fixes the "No tests found" issue).
-- `npm run run` executes your generated spec file directly in headed mode (not Playwright UI mode).
-- Downloads are configured to persist to `artifacts/downloads` via `playwright.config.ts` launch options.
