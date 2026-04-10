@@ -26,18 +26,6 @@ async function saveDownload(download) {
   return target;
 }
 
-async function wakeSidebar(page) {
-  const menuList = page.locator('#MenuList');
-  await menuList.waitFor({ state: 'visible', timeout: 15_000 });
-  await menuList.hover();
-
-  // Sweep down the sidebar to trigger hover-driven text/menu handlers.
-  for (const y of [130, 210, 290, 370]) {
-    await page.mouse.move(42, y);
-    await page.waitForTimeout(120);
-  }
-}
-
 async function openSalesMenu(page) {
   const salesLink = page.locator('#Menu_Sales');
   const salesIcon = page.locator('#Menu_Sales .MenuSales');
@@ -115,17 +103,15 @@ async function openSalesMenu(page) {
 async function openSalesAndClickOrderReporting(page) {
   const orderReporting = page.locator('#Menu_Links_Sales').getByText('Order Reporting');
 
-  for (let i = 1; i <= 5; i += 1) {
-    await openSalesMenu(page);
-    await page.waitForTimeout(100);
+  await openSalesMenu(page);
+  await page.waitForTimeout(100);
 
-    if (await orderReporting.isVisible()) {
-      await orderReporting.click();
-      return;
-    }
-
-    console.log(`Order Reporting not visible after menu open cycle ${i}, retrying...`);
+  if (await orderReporting.isVisible()) {
+    await orderReporting.click();
+    return;
   }
+
+  console.log(`Order Reporting not visible after menu open cycle ${i}, retrying...`);
 
   await page.screenshot({ path: `artifacts/screenshots/order-reporting-not-open-${Date.now()}.png`, fullPage: true });
   throw new Error('Sales opened but Order Reporting entry could not be clicked.');
@@ -144,13 +130,6 @@ async function main() {
 
   try {
     await page.goto(deacomUrl, { waitUntil: 'domcontentloaded' });
-
-    // Deacom hides left-nav labels until hover/focus. Prime it first.
-    await wakeSidebar(page);
-    await page.waitForTimeout(1_500);
-
-    // Manual pause requested: 1 second.
-    await page.waitForTimeout(1_000);
 
     // --------------------------------------------------------------------------
     // GENERATED STEPS SECTION (copy/paste from Playwright codegen here)
