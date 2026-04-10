@@ -44,18 +44,31 @@ async function openSalesMenu(page) {
 
   const attempts = [
     async () => {
-      console.log('Sales menu attempt 1: hover + regular click');
+      console.log('Sales menu attempt 1: hover-only open');
       await salesLink.hover();
-      await salesLink.click();
+      await page.waitForTimeout(650);
     },
     async () => {
-      console.log('Sales menu attempt 2: hover + force click');
+      console.log('Sales menu attempt 2: hover + click(delay)');
       await salesLink.hover();
-      await page.waitForTimeout(120);
-      await salesLink.click({ force: true });
+      await page.waitForTimeout(500);
+      await salesLink.click({ delay: 120 });
     },
     async () => {
-      console.log('Sales menu attempt 3: physical mouse click at center');
+      console.log('Sales menu attempt 3: drift-out + hover + click(delay)');
+      const box = await salesLink.boundingBox();
+      if (box) {
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await page.mouse.move(x + 80, y);
+        await page.waitForTimeout(150);
+        await page.mouse.move(x, y);
+      }
+      await page.waitForTimeout(500);
+      await salesLink.click({ delay: 120 });
+    },
+    async () => {
+      console.log('Sales menu attempt 4: physical mouse click at center');
       const box = await salesLink.boundingBox();
       if (box) {
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -63,7 +76,7 @@ async function openSalesMenu(page) {
       }
     },
     async () => {
-      console.log('Sales menu attempt 4: double click + slight drift right');
+      console.log('Sales menu attempt 5: double click + slight drift right');
       const box = await salesLink.boundingBox();
       if (box) {
         const x = box.x + box.width / 2;
@@ -74,7 +87,7 @@ async function openSalesMenu(page) {
       }
     },
     async () => {
-      console.log('Sales menu attempt 5: keyboard Enter on focused link');
+      console.log('Sales menu attempt 6: keyboard Enter on focused link');
       await salesLink.focus();
       await page.keyboard.press('Enter');
     }
@@ -95,7 +108,7 @@ async function openSalesMenu(page) {
 async function openSalesAndClickOrderReporting(page) {
   const orderReporting = page.locator('#Menu_Links_Sales').getByText('Order Reporting');
 
-  for (let i = 1; i <= 4; i += 1) {
+  for (let i = 1; i <= 5; i += 1) {
     await openSalesMenu(page);
     await page.waitForTimeout(100);
 
@@ -127,6 +140,7 @@ async function main() {
 
     // Deacom hides left-nav labels until hover/focus. Prime it first.
     await wakeSidebar(page);
+    await page.waitForTimeout(1_500);
 
     // Manual pause requested: 1 second.
     await page.waitForTimeout(1_000);
