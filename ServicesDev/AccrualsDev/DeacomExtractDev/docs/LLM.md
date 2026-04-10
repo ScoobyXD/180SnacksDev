@@ -17,6 +17,7 @@ Run these from `ServicesDev/AccrualsDev/DeacomExtractDev`.
 - It executes `src/index.mjs` directly (no ts-node loader).
 - It loads auth from `playwright/.auth/deacom.json`.
 - It applies the sidebar-prime workaround (`wakeSidebar`) so hidden Deacom labels become available.
+- It uses a resilient `openSalesMenu` routine (click + hover + forced click fallback + Enter fallback) before choosing **Order Reporting**.
 - It includes an explicit manual delay (`await page.waitForTimeout(1000)`).
 - The **GENERATED STEPS SECTION** in `src/index.mjs` is where you copy/paste updated codegen steps.
 - Downloads are persisted to `artifacts/downloads`.

@@ -31,6 +31,41 @@ async function wakeSidebar(page) {
   await page.locator('#Menu_Links_Sales').waitFor({ state: 'visible', timeout: 15_000 });
 }
 
+async function openSalesMenu(page) {
+  const salesLink = page.getByRole('link', { name: /sales/i });
+  const salesMenu = page.locator('#Menu_Links_Sales');
+
+  await salesLink.waitFor({ state: 'visible', timeout: 15_000 });
+  await salesLink.click();
+  await page.waitForTimeout(250);
+
+  if (await salesMenu.isVisible()) {
+    return;
+  }
+
+  // Deacom sometimes highlights Sales but does not open submenu on first synthetic click.
+  await salesLink.hover();
+  await page.waitForTimeout(200);
+  await salesLink.click({ force: true });
+  await page.waitForTimeout(300);
+
+  if (await salesMenu.isVisible()) {
+    return;
+  }
+
+  // Last resort: physical mouse click at center + keyboard Enter.
+  const box = await salesLink.boundingBox();
+  if (box) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
+  }
+  await salesLink.focus();
+  await page.keyboard.press('Enter');
+
+  await salesMenu.waitFor({ state: 'visible', timeout: 10_000 });
+}
+
 async function main() {
   await assertAuthExists();
 
@@ -54,7 +89,7 @@ async function main() {
     // GENERATED STEPS SECTION (copy/paste from Playwright codegen here)
     // Keep this section in sync whenever you re-record.
     // --------------------------------------------------------------------------
-    await page.getByRole('link', { name: /sales/i }).click();
+    await openSalesMenu(page);
     await page.locator('#Menu_Links_Sales').getByText('Order Reporting').click();
     await page.getByLabel('Report Type').selectOption('orddtl');
     await page.getByLabel('Status', { exact: true }).selectOption('All Orders');
