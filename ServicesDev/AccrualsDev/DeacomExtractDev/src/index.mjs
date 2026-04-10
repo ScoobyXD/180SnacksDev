@@ -44,35 +44,37 @@ async function openSalesMenu(page) {
 
   const attempts = [
     async () => {
-      console.log('Sales menu attempt 1: regular click');
+      console.log('Sales menu attempt 1: hover + regular click');
+      await salesLink.hover();
       await salesLink.click();
     },
     async () => {
-      console.log('Sales menu attempt 2: hover + click(force)');
+      console.log('Sales menu attempt 2: hover + force click');
       await salesLink.hover();
       await page.waitForTimeout(120);
       await salesLink.click({ force: true });
     },
     async () => {
-      console.log('Sales menu attempt 3: double click');
-      await salesLink.dblclick({ force: true });
-    },
-    async () => {
-      console.log('Sales menu attempt 4: dispatch mouse events on element');
-      await salesLink.evaluate((node) => {
-        for (const type of ['mouseover', 'mouseenter', 'mousemove', 'mousedown', 'mouseup', 'click']) {
-          node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
-        }
-      });
-    },
-    async () => {
-      console.log('Sales menu attempt 5: physical mouse center click + Enter');
+      console.log('Sales menu attempt 3: physical mouse click at center');
       const box = await salesLink.boundingBox();
       if (box) {
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-        await page.mouse.down();
-        await page.mouse.up();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { delay: 80 });
       }
+    },
+    async () => {
+      console.log('Sales menu attempt 4: double click + slight drift right');
+      const box = await salesLink.boundingBox();
+      if (box) {
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await page.mouse.move(x, y);
+        await page.mouse.dblclick(x, y, { delay: 80 });
+        await page.mouse.move(x + 20, y);
+      }
+    },
+    async () => {
+      console.log('Sales menu attempt 5: keyboard Enter on focused link');
       await salesLink.focus();
       await page.keyboard.press('Enter');
     }
@@ -88,6 +90,25 @@ async function openSalesMenu(page) {
 
   await page.screenshot({ path: `artifacts/screenshots/sales-menu-not-open-${Date.now()}.png`, fullPage: true });
   throw new Error('Failed to open Sales submenu after multiple interaction strategies.');
+}
+
+async function openSalesAndClickOrderReporting(page) {
+  const orderReporting = page.locator('#Menu_Links_Sales').getByText('Order Reporting');
+
+  for (let i = 1; i <= 4; i += 1) {
+    await openSalesMenu(page);
+    await page.waitForTimeout(100);
+
+    if (await orderReporting.isVisible()) {
+      await orderReporting.click();
+      return;
+    }
+
+    console.log(`Order Reporting not visible after menu open cycle ${i}, retrying...`);
+  }
+
+  await page.screenshot({ path: `artifacts/screenshots/order-reporting-not-open-${Date.now()}.png`, fullPage: true });
+  throw new Error('Sales opened but Order Reporting entry could not be clicked.');
 }
 
 async function main() {
@@ -114,8 +135,7 @@ async function main() {
     // GENERATED STEPS SECTION (copy/paste from Playwright codegen here)
     // Keep this section in sync whenever you re-record.
     // --------------------------------------------------------------------------
-    await openSalesMenu(page);
-    await page.locator('#Menu_Links_Sales').getByText('Order Reporting').click();
+    await openSalesAndClickOrderReporting(page);
     await page.getByLabel('Report Type').selectOption('orddtl');
     await page.getByLabel('Status', { exact: true }).selectOption('All Orders');
     await page.getByRole('textbox', { name: 'Start Date' }).fill('01/01/2026');
