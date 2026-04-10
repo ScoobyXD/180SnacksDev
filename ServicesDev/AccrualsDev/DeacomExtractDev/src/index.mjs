@@ -137,17 +137,31 @@ async function main() {
     // --------------------------------------------------------------------------
     await openSalesAndClickOrderReporting(page);
     await page.getByLabel('Report Type').selectOption('orddtl');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
+
     await page.getByLabel('Status', { exact: true }).selectOption('All Orders');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(600);
+
     await page.getByRole('textbox', { name: 'Start Date' }).fill('01/01/2026');
     await page.getByRole('textbox', { name: 'Start Date' }).press('Enter');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
 
     const endDate = new Date().toISOString().slice(0, 10);
     const [year, month, day] = endDate.split('-');
     await page.getByRole('textbox', { name: 'End Date' }).fill(`${month}/${day}/${year}`);
     await page.getByRole('textbox', { name: 'End Date' }).press('Enter');
-    await page.locator('#ID100 > .ActionIcon > .material-icons').click();
-    await page.locator('.SearchboxColumnInput').first().fill('edi allowance');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
+
+    await page.getByRole('textbox', { name: 'Part Number' }).click();
+    await page.waitForTimeout(300);
+    await page.locator('#ID100_Input').pressSequentially('edi', { delay: 100 });
+    await page.waitForTimeout(500); // let search results populate
     await page.getByRole('gridcell', { name: 'EDI Allowance' }).nth(1).dblclick();
+
     await page.getByRole('link', { name: /view/i }).click();
 
     page.once('dialog', (dialog) => {
