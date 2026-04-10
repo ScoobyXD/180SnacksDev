@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 const deacomUrl = 'http://192.168.1.7:8081/';
 const authPath = path.join('playwright', '.auth', 'deacom.json');
 const downloadsDir = path.join('artifacts', 'downloads');
+const screenshotsDir = path.join('artifacts', 'screenshots');
 
 async function assertAuthExists() {
   try {
@@ -34,40 +35,64 @@ async function wakeSidebar(page) {
 async function openSalesMenu(page) {
   const salesLink = page.getByRole('link', { name: /sales/i });
   const salesMenu = page.locator('#Menu_Links_Sales');
+  const orderReporting = salesMenu.getByText('Order Reporting');
 
   await salesLink.waitFor({ state: 'visible', timeout: 15_000 });
-  await salesLink.click();
-  await page.waitForTimeout(250);
 
-  if (await salesMenu.isVisible()) {
-    return;
+  const isExpanded = async () => orderReporting.isVisible();
+  const settle = async () => page.waitForTimeout(350);
+
+  const attempts = [
+    async () => {
+      console.log('Sales menu attempt 1: regular click');
+      await salesLink.click();
+    },
+    async () => {
+      console.log('Sales menu attempt 2: hover + click(force)');
+      await salesLink.hover();
+      await page.waitForTimeout(120);
+      await salesLink.click({ force: true });
+    },
+    async () => {
+      console.log('Sales menu attempt 3: double click');
+      await salesLink.dblclick({ force: true });
+    },
+    async () => {
+      console.log('Sales menu attempt 4: dispatch mouse events on element');
+      await salesLink.evaluate((node) => {
+        for (const type of ['mouseover', 'mouseenter', 'mousemove', 'mousedown', 'mouseup', 'click']) {
+          node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+        }
+      });
+    },
+    async () => {
+      console.log('Sales menu attempt 5: physical mouse center click + Enter');
+      const box = await salesLink.boundingBox();
+      if (box) {
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.up();
+      }
+      await salesLink.focus();
+      await page.keyboard.press('Enter');
+    }
+  ];
+
+  for (const attempt of attempts) {
+    await attempt();
+    await settle();
+    if (await isExpanded()) {
+      return;
+    }
   }
 
-  // Deacom sometimes highlights Sales but does not open submenu on first synthetic click.
-  await salesLink.hover();
-  await page.waitForTimeout(200);
-  await salesLink.click({ force: true });
-  await page.waitForTimeout(300);
-
-  if (await salesMenu.isVisible()) {
-    return;
-  }
-
-  // Last resort: physical mouse click at center + keyboard Enter.
-  const box = await salesLink.boundingBox();
-  if (box) {
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.up();
-  }
-  await salesLink.focus();
-  await page.keyboard.press('Enter');
-
-  await salesMenu.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.screenshot({ path: `artifacts/screenshots/sales-menu-not-open-${Date.now()}.png`, fullPage: true });
+  throw new Error('Failed to open Sales submenu after multiple interaction strategies.');
 }
 
 async function main() {
   await assertAuthExists();
+  await fs.mkdir(screenshotsDir, { recursive: true });
 
   const browser = await chromium.launch({ headless: false, slowMo: 50 });
   const context = await browser.newContext({
