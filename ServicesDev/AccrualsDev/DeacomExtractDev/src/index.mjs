@@ -27,13 +27,20 @@ async function saveDownload(download) {
 }
 
 async function wakeSidebar(page) {
-  await page.mouse.move(20, 140);
-  await page.waitForTimeout(400);
-  await page.locator('#Menu_Links_Sales').waitFor({ state: 'visible', timeout: 15_000 });
+  const menuList = page.locator('#MenuList');
+  await menuList.waitFor({ state: 'visible', timeout: 15_000 });
+  await menuList.hover();
+
+  // Sweep down the sidebar to trigger hover-driven text/menu handlers.
+  for (const y of [130, 210, 290, 370]) {
+    await page.mouse.move(42, y);
+    await page.waitForTimeout(120);
+  }
 }
 
 async function openSalesMenu(page) {
-  const salesLink = page.getByRole('link', { name: /sales/i });
+  const salesLink = page.locator('#Menu_Sales');
+  const salesIcon = page.locator('#Menu_Sales .MenuSales');
   const salesMenu = page.locator('#Menu_Links_Sales');
   const orderReporting = salesMenu.getByText('Order Reporting');
 
@@ -49,13 +56,13 @@ async function openSalesMenu(page) {
       await page.waitForTimeout(650);
     },
     async () => {
-      console.log('Sales menu attempt 2: hover + click(delay)');
+      console.log('Sales menu attempt 2: hover + icon click(delay)');
       await salesLink.hover();
       await page.waitForTimeout(500);
-      await salesLink.click({ delay: 120 });
+      await salesIcon.click({ delay: 150 });
     },
     async () => {
-      console.log('Sales menu attempt 3: drift-out + hover + click(delay)');
+      console.log('Sales menu attempt 3: drift-out + hover + anchor click(delay)');
       const box = await salesLink.boundingBox();
       if (box) {
         const x = box.x + box.width / 2;
@@ -65,7 +72,7 @@ async function openSalesMenu(page) {
         await page.mouse.move(x, y);
       }
       await page.waitForTimeout(500);
-      await salesLink.click({ delay: 120 });
+      await salesLink.click({ delay: 150 });
     },
     async () => {
       console.log('Sales menu attempt 4: physical mouse click at center');
