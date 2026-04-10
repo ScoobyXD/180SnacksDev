@@ -6,6 +6,7 @@ export default defineConfig({
   timeout: 120_000,
   fullyParallel: false,
   reporter: 'list',
+  outputDir: 'artifacts/test-results',
   use: {
     acceptDownloads: true,
     launchOptions: {
