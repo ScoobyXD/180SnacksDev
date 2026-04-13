@@ -46,7 +46,7 @@ async function main(): Promise<void> {
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).click();
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('2/09/2026');
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).press('Enter');
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(1500);
 
     await page.getByRole('button', { name: 'Export to Excel' }).click();
     const popupPromise = page.waitForEvent('popup');
