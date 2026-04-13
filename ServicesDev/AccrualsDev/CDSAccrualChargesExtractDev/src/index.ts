@@ -43,8 +43,6 @@ async function main(): Promise<void> {
     await page.getByRole('link', { name: ' REPORTING' }).click();
     await page.getByRole('link', { name: 'Event Status Report' }).click();
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).click();
-    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('');
-    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).click();
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('2/09/2026');
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).press('Enter');
     await page.getByRole('button', { name: 'Export to Excel' }).click();
