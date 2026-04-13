@@ -5,6 +5,7 @@ import { chromium, type Download } from 'playwright';
 const portalUrl = 'https://portal-cdsus.demosystem.net/#/';
 const authPath = path.join('playwright', '.auth', 'cds.json');
 const downloadsDir = path.join('artifacts', 'downloads');
+const downloadTimeoutMs = 120_000;
 
 async function assertAuthExists(): Promise<void> {
   try {
@@ -46,11 +47,13 @@ async function main(): Promise<void> {
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('2/09/2026');
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).press('Enter');
     await page.getByRole('button', { name: 'Export to Excel' }).click();
-    const popupPromise = page.waitForEvent('popup');
-    const downloadPromise = page.waitForEvent('download');
-    await page.locator('iframe[title="Data Visualization"]').contentFrame().locator('[data-test-id="DownloadLink"]').click();
+    const downloadPromise = context.waitForEvent('download', { timeout: downloadTimeoutMs });
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup', { timeout: downloadTimeoutMs }),
+      page.locator('iframe[title="Data Visualization"]').contentFrame().locator('[data-test-id="DownloadLink"]').click()
+    ]);
 
-    const popup = await popupPromise;
+    await popup.waitForLoadState('domcontentloaded').catch(() => undefined);
     const download = await downloadPromise;
     const saved = await saveDownload(download);
 
