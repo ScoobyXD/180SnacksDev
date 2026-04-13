@@ -40,28 +40,20 @@ async function main(): Promise<void> {
     await page.goto(portalUrl, { waitUntil: 'domcontentloaded' });
 
     await page.getByRole('button', { name: 'SELECT' }).click();
-    await page.getByRole('listitem').filter({ hasText: 'REPORTING' }).click();
+    await page.getByRole('link', { name: ' REPORTING' }).click();
     await page.getByRole('link', { name: 'Event Status Report' }).click();
-
-    const vizFrame = page.locator('iframe[title="Data Visualization"]').contentFrame();
-
-    await vizFrame.getByRole('textbox', { name: 'From Date' }).click();
-    await vizFrame.locator('.tab-datepicker-header-button').first().click();
-    await vizFrame.locator('.tab-datepicker-header-button').first().click();
-    await vizFrame.getByRole('cell', { name: '9', exact: true }).click();
-
+    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).click();
+    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('');
+    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).click();
+    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('2/09/2026');
+    await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).press('Enter');
     await page.getByRole('button', { name: 'Export to Excel' }).click();
-
-    const popupPromise = page.waitForEvent('popup');
+    const page1Promise = page.waitForEvent('popup');
     const downloadPromise = page.waitForEvent('download');
-    await vizFrame.locator('[data-test-id="DownloadLink"]').click();
-
-    const popup = await popupPromise;
-    await popup.close();
-
+    await page.locator('iframe[title="Data Visualization"]').contentFrame().locator('[data-test-id="DownloadLink"]').click();
+    const page1 = await page1Promise;
     const download = await downloadPromise;
-    const savedPath = await saveDownload(download);
-    console.log(`Saved download to ${savedPath}`);
+
   } finally {
     await context.close();
     await browser.close();
