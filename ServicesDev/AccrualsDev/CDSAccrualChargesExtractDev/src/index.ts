@@ -44,7 +44,6 @@ async function main(): Promise<void> {
   }
 
   await runCommand('playwright', ['test', 'generated/cds.codegen.spec.ts', '--headed', '--workers=1']);
-}
 
 main().catch((error) => {
   console.error(error);
