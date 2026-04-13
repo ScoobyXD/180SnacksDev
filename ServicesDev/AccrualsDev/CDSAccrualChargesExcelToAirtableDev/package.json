@@ -1,0 +1,12 @@
+{
+  "name": "cds-accrual-charges-excel-to-airtable-dev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node src/index.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}
