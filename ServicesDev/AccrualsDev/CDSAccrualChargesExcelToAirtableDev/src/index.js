@@ -7,7 +7,8 @@ import {
   appendRowsToAirtable,
   buildAirtableFields,
   ensureAirtableBaseAndTable,
-  getAirtableConfig
+  getAirtableConfig,
+  normalizeRowsForAirtable
 } from './airtable.js';
 
 function loadEnvFiles() {
@@ -177,9 +178,10 @@ async function main() {
     return;
   }
 
-  const fields = buildAirtableFields(headers, rows);
+  const normalizedRows = normalizeRowsForAirtable(rows, headers);
+  const fields = buildAirtableFields(headers, normalizedRows);
   const ensured = await ensureAirtableBaseAndTable(airtableConfig, fields);
-  const appended = await appendRowsToAirtable({ ...airtableConfig, baseId: ensured.baseId }, rows);
+  const appended = await appendRowsToAirtable({ ...airtableConfig, baseId: ensured.baseId }, normalizedRows);
 
   console.log(JSON.stringify({
     enabled: true,
@@ -191,7 +193,8 @@ async function main() {
     createdBase: ensured.createdBase,
     createdTable: ensured.createdTable,
     inserted: appended.inserted,
-    batches: appended.batches
+    batches: appended.batches,
+    addedFields: ensured.addedFields
   }, null, 2));
 }
 
