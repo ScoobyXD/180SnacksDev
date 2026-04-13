@@ -10,7 +10,7 @@ const FIELD_DEFINITIONS = {
   'Item #': { type: 'singleLineText' },
   'Item Name': { type: 'singleLineText' },
   'Costco Region': { type: 'singleSelect' },
-  'Execution Date': { type: 'date' },
+  'Execution Date': { type: 'date', options: { dateFormat: { name: 'us' } } },
   Warehouse: { type: 'singleLineText' },
   Status: { type: 'singleSelect' },
   'Not Purchased Reason': { type: 'singleLineText' },
@@ -18,8 +18,8 @@ const FIELD_DEFINITIONS = {
   'Event Type': { type: 'singleSelect' },
   'Split Vendor': { type: 'singleLineText' },
   'Invoice #': { type: 'singleLineText' },
-  'Updated Date Est': { type: 'dateTime' },
-  Today: { type: 'date' },
+  'Updated Date Est': { type: 'date', options: { dateFormat: { name: 'us' } } },
+  Today: { type: 'date', options: { dateFormat: { name: 'friendly' } } },
   'Event Count': { type: 'number', options: { precision: 1 } },
   'Labor Charge + Tax': { type: 'currency', options: { precision: 2, symbol: '$' } },
   'Product Charge + Tax': { type: 'currency', options: { precision: 2, symbol: '$' } },
@@ -130,11 +130,8 @@ function coerceValueForField(fieldName, value) {
   }
 
   if (definition.type === 'date') {
-    return parseDateValue(value, { withTime: false });
-  }
-
-  if (definition.type === 'dateTime') {
-    return parseDateValue(value, { withTime: true });
+    const withTime = !!definition.options?.timeFormat;
+    return parseDateValue(value, { withTime });
   }
 
   if (definition.type === 'currency') {
@@ -237,6 +234,11 @@ function sanitizeFieldForAirtable(field) {
     out.options = field.options;
   }
 
+  // Airtable requires dateFormat options when creating date fields via the API
+  if (out.type === 'date' && !out.options?.dateFormat) {
+    out.options = { dateFormat: { name: 'us' }, ...out.options };
+  }
+
   return out;
 }
 
@@ -301,12 +303,20 @@ export function getAirtableConfig() {
 
 export async function ensureAirtableBaseAndTable(config, fields) {
   if (config.baseId && config.tableId) {
+    // Still check for missing fields even when both IDs are known
+    const baseUrl = `https://api.airtable.com/v0/meta/bases/${config.baseId}/tables`;
+    const meta = await airtableRequest(baseUrl, { token: config.token });
+    const existing = meta.tables?.find((table) => table.id === config.tableId);
+    const existingFieldNames = new Set((existing?.fields ?? []).map((field) => field.name));
+    const fieldObjectsByName = Object.fromEntries(fields.map((field) => [field.name, field]));
+    const addedFields = await addMissingFields(config, config.tableId, fieldObjectsByName, existingFieldNames);
+
     return {
       baseId: config.baseId,
       tableId: config.tableId,
       createdBase: false,
       createdTable: false,
-      addedFields: []
+      addedFields
     };
   }
 
@@ -398,17 +408,22 @@ export async function ensureAirtableTable(config, fields) {
   return { createdTable: true, tableId: created.id, addedFields: [] };
 }
 
-async function appendBatch(config, rows) {
+async function appendBatch(config, rows, batchIndex = 0) {
   const tableRef = config.tableId || encodeURIComponent(config.tableName);
   const url = `https://api.airtable.com/v0/${config.baseId}/${tableRef}`;
-  return airtableRequest(url, {
-    method: 'POST',
-    token: config.token,
-    body: {
-      records: rows.map((row) => ({ fields: row })),
-      typecast: true
-    }
-  });
+  const body = {
+    records: rows.map((row) => ({ fields: row })),
+    typecast: true
+  };
+
+  try {
+    return await airtableRequest(url, { method: 'POST', token: config.token, body });
+  } catch (error) {
+    console.error(`\n--- BATCH ${batchIndex} FAILED ---`);
+    console.error('Field names sent:', Object.keys(rows[0] ?? {}));
+    console.error('First record in failing batch:', JSON.stringify(rows[0], null, 2));
+    throw error;
+  }
 }
 
 export async function appendRowsToAirtable(config, rows) {
@@ -423,7 +438,7 @@ export async function appendRowsToAirtable(config, rows) {
   let inserted = 0;
 
   for (let i = 0; i < batches.length; i += 1) {
-    const payload = await appendBatch(config, batches[i]);
+    const payload = await appendBatch(config, batches[i], i);
     inserted += payload.records?.length ?? 0;
   }
 
@@ -453,7 +468,11 @@ export function normalizeRowsForAirtable(rows, headers) {
   return rows.map((row) => {
     const out = {};
     for (const header of headers) {
-      out[header] = coerceValueForField(header, row[header]);
+      const value = coerceValueForField(header, row[header]);
+      // Omit null/undefined — Airtable rejects null for date, number, currency, singleSelect fields
+      if (value !== null && value !== undefined) {
+        out[header] = value;
+      }
     }
     return out;
   });

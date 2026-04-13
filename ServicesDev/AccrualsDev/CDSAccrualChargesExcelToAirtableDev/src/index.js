@@ -120,7 +120,33 @@ async function loadWorkbookRows(inputPath) {
   const ext = path.extname(inputPath).toLowerCase();
 
   if (ext === '.csv') {
-    await workbook.csv.readFile(inputPath);
+    // Detect encoding: UTF-16 LE starts with BOM FF FE, UTF-16 BE with FE FF
+    const rawBuf = fs.readFileSync(inputPath);
+    let csvText;
+    if (rawBuf[0] === 0xFF && rawBuf[1] === 0xFE) {
+      csvText = rawBuf.toString('utf16le');
+    } else if (rawBuf[0] === 0xFE && rawBuf[1] === 0xFF) {
+      for (let i = 0; i < rawBuf.length - 1; i += 2) {
+        const tmp = rawBuf[i]; rawBuf[i] = rawBuf[i + 1]; rawBuf[i + 1] = tmp;
+      }
+      csvText = rawBuf.toString('utf16le');
+    } else {
+      csvText = rawBuf.toString('utf8');
+    }
+    // Strip BOM
+    if (csvText.charCodeAt(0) === 0xFEFF) csvText = csvText.slice(1);
+
+    // Detect delimiter
+    const firstLine = csvText.split(/\r?\n/)[0] || '';
+    const delimiter = firstLine.includes('\t') ? '\t' : ',';
+
+    const tmpPath = path.join(process.cwd(), `_tmp_utf8_${Date.now()}.csv`);
+    fs.writeFileSync(tmpPath, csvText, 'utf8');
+    try {
+      await workbook.csv.readFile(tmpPath, { parserOptions: { delimiter } });
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    }
   } else {
     await workbook.xlsx.readFile(inputPath);
   }
@@ -145,14 +171,28 @@ async function loadWorkbookRows(inputPath) {
     throw new Error('Workbook is empty.');
   }
 
-  const headers = rowArrays[headerRowIndex].map((value, index) => {
-    const label = String(value ?? '').trim();
+  const rawHeaders = rowArrays[headerRowIndex].map((value, index) => {
+    // Strip invisible/non-printable Unicode chars (BOM, combining grapheme joiner, zero-width chars)
+    // then trim whitespace
+    const label = String(value ?? '')
+      .replace(/[\u034F\uFEFF\u200B-\u200D\u00AD\r\n]/g, '')
+      .trim();
     return label || `Column_${index + 1}`;
   });
+
+  // The first column (A1) is always blank in this export — it's the Department column
+  const headers = rawHeaders.map((h, i) => {
+    if (i === 0 && h.startsWith('Column_')) return 'Department';
+    return h;
+  });
+
+  // Filter out summary/total rows
+  const SUMMARY_MARKERS = /^(grand\s+)?total$/i;
 
   const rows = rowArrays
     .slice(headerRowIndex + 1)
     .filter((row) => !isEmptyRow(row))
+    .filter((row) => !row.some((cell) => typeof cell === 'string' && SUMMARY_MARKERS.test(cell.trim())))
     .map((values) => {
       const record = {};
       for (let i = 0; i < headers.length; i += 1) {
@@ -187,6 +227,17 @@ async function main() {
   }
 
   const normalizedRows = normalizeRowsForAirtable(rows, headers);
+
+  // --- Debug: show what we're about to send ---
+  console.log('--- DEBUG: Parsed headers ---');
+  console.log(JSON.stringify(headers, null, 2));
+  console.log(`--- DEBUG: ${normalizedRows.length} data rows (summary rows excluded) ---`);
+  if (normalizedRows.length > 0) {
+    console.log('--- DEBUG: First record to be sent ---');
+    console.log(JSON.stringify(normalizedRows[0], null, 2));
+  }
+  // --- End debug ---
+
   const fields = buildAirtableFields(headers, normalizedRows);
   const ensured = await ensureAirtableBaseAndTable(airtableConfig, fields);
   const appended = await appendRowsToAirtable({ ...airtableConfig, baseId: ensured.baseId, tableId: ensured.tableId }, normalizedRows);
