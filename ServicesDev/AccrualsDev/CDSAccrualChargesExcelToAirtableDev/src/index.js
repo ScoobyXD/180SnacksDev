@@ -61,7 +61,7 @@ function findLatestCDSDownload() {
   }
 
   const candidates = fs.readdirSync(downloadsDir)
-    .filter((name) => /\.xlsx$/i.test(name))
+    .filter((name) => /\.(xlsx|csv)$/i.test(name))
     .map((name) => {
       const fullPath = path.join(downloadsDir, name);
       const stats = fs.statSync(fullPath);
@@ -70,7 +70,9 @@ function findLatestCDSDownload() {
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   if (!candidates.length) {
-    throw new Error(`No .xlsx files found in ${downloadsDir}`);
+    const available = fs.readdirSync(downloadsDir);
+    const hint = available.length ? ` Found files: ${available.join(', ')}` : ' Directory is empty.';
+    throw new Error(`No .xlsx or .csv files found in ${downloadsDir}.${hint}`);
   }
 
   return candidates[0].fullPath;
@@ -115,7 +117,13 @@ function isEmptyRow(values) {
 
 async function loadWorkbookRows(inputPath) {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(inputPath);
+  const ext = path.extname(inputPath).toLowerCase();
+
+  if (ext === '.csv') {
+    await workbook.csv.readFile(inputPath);
+  } else {
+    await workbook.xlsx.readFile(inputPath);
+  }
 
   const worksheet = workbook.worksheets[0];
   if (!worksheet) {
