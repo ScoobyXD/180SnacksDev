@@ -175,7 +175,7 @@ async function airtableRequest(url, { method = 'GET', body, token }) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Airtable API request failed (${response.status} ${response.statusText}): ${text}`);
+    throw new Error(`Airtable API request failed (${response.status} ${response.statusText}): ${text}. URL: ${url}`);
   }
 
   const text = await response.text();
@@ -229,6 +229,30 @@ function withSingleSelectChoices(field, rows) {
   };
 }
 
+
+function sanitizeFieldForAirtable(field) {
+  if (field.type === 'singleSelect') {
+    const choices = field.options?.choices ?? [];
+    if (!choices.length) {
+      return {
+        name: field.name,
+        type: 'singleLineText'
+      };
+    }
+  }
+
+  const out = {
+    name: field.name,
+    type: field.type
+  };
+
+  if (field.options !== undefined) {
+    out.options = field.options;
+  }
+
+  return out;
+}
+
 async function listWorkspaceBases(config) {
   const workspaceUrl = `https://api.airtable.com/v0/meta/workspaces/${config.workspaceId}/bases`;
   const payload = await airtableRequest(workspaceUrl, { token: config.token });
@@ -245,7 +269,7 @@ async function createBase(config, fields) {
       tables: [
         {
           name: config.tableName,
-          fields
+          fields: fields.map(sanitizeFieldForAirtable)
         }
       ]
     }
@@ -321,7 +345,7 @@ async function addMissingFields(config, tableId, fieldObjectsByName, existingFie
     await airtableRequest(createFieldUrl, {
       method: 'POST',
       token: config.token,
-      body: fieldObjectsByName[fieldName]
+      body: sanitizeFieldForAirtable(fieldObjectsByName[fieldName])
     });
     added.push(fieldName);
   }
@@ -351,7 +375,7 @@ export async function ensureAirtableTable(config, fields) {
     token: config.token,
     body: {
       name: config.tableName,
-      fields
+      fields: fields.map(sanitizeFieldForAirtable)
     }
   });
 
@@ -403,7 +427,8 @@ export function buildAirtableFields(headers, rows) {
 
   return headers.map((header) => {
     const inferred = inferField(header, sampleByHeader.get(header));
-    return withSingleSelectChoices(inferred, rows);
+    const withChoices = withSingleSelectChoices(inferred, rows);
+    return sanitizeFieldForAirtable(withChoices);
   });
 }
 
