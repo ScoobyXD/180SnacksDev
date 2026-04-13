@@ -6,7 +6,8 @@
   "scripts": {
     "auth:setup": "node src/authSetup.mjs",
     "record:auth": "node -e \"require('fs').mkdirSync('generated',{recursive:true})\" && playwright codegen --target=playwright-test --output=generated/cds.codegen.spec.ts --load-storage=playwright/.auth/cds.json https://portal-cdsus.demosystem.net/#/",
-    "run": "playwright test generated/cds.codegen.spec.ts --headed --workers=1"
+    "run:codegen": "playwright test generated/cds.codegen.spec.ts --headed --workers=1",
+    "run": "node --loader ts-node/esm src/index.ts"
   },
   "dependencies": {
     "playwright": "^1.59.0"
