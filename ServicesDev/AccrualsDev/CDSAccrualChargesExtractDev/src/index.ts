@@ -48,11 +48,16 @@ async function main(): Promise<void> {
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).fill('2/09/2026');
     await page.locator('iframe[title="Data Visualization"]').contentFrame().getByRole('textbox', { name: 'From Date' }).press('Enter');
     await page.getByRole('button', { name: 'Export to Excel' }).click();
-    const page1Promise = page.waitForEvent('popup');
+    const popupPromise = page.waitForEvent('popup');
     const downloadPromise = page.waitForEvent('download');
     await page.locator('iframe[title="Data Visualization"]').contentFrame().locator('[data-test-id="DownloadLink"]').click();
-    const page1 = await page1Promise;
+
+    const popup = await popupPromise;
     const download = await downloadPromise;
+    const saved = await saveDownload(download);
+
+    await popup.close().catch(() => undefined);
+    console.log(`Saved download to ${saved}`);
 
   } finally {
     await context.close();
