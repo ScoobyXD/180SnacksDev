@@ -27,6 +27,12 @@ Run these from `ServicesDev/AccrualsDev/DeacomExtractDev`.
 3. Run the maintained Deacom script:
    - `npm run run`
 
+## Hard rule for command wiring
+- `npm run run` must execute only the maintained script (`src/index.mjs` in this project).
+- `npm run run` must never execute `generated/*.codegen.spec.ts`.
+- Generated codegen output is for recording/reference and should be run only via an explicit codegen command if added.
+
+
 ## How `npm run run` works
 - It executes `src/index.mjs` directly (no ts-node loader).
 - It loads auth from `playwright/.auth/deacom.json`.
