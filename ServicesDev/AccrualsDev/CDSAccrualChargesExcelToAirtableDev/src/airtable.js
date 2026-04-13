@@ -10,10 +10,7 @@ const FIELD_DEFINITIONS = {
   'Item #': { type: 'singleLineText' },
   'Item Name': { type: 'singleLineText' },
   'Costco Region': { type: 'singleSelect' },
-  'Execution Date': {
-    type: 'date',
-    options: { dateFormat: { name: 'local' } }
-  },
+  'Execution Date': { type: 'date' },
   Warehouse: { type: 'singleLineText' },
   Status: { type: 'singleSelect' },
   'Not Purchased Reason': { type: 'singleLineText' },
@@ -21,18 +18,8 @@ const FIELD_DEFINITIONS = {
   'Event Type': { type: 'singleSelect' },
   'Split Vendor': { type: 'singleLineText' },
   'Invoice #': { type: 'singleLineText' },
-  'Updated Date Est': {
-    type: 'dateTime',
-    options: {
-      dateFormat: { name: 'local' },
-      timeFormat: { name: '12hour' },
-      timeZone: 'client'
-    }
-  },
-  Today: {
-    type: 'date',
-    options: { dateFormat: { name: 'local' } }
-  },
+  'Updated Date Est': { type: 'dateTime' },
+  Today: { type: 'date' },
   'Event Count': { type: 'number', options: { precision: 1 } },
   'Labor Charge + Tax': { type: 'currency', options: { precision: 2, symbol: '$' } },
   'Product Charge + Tax': { type: 'currency', options: { precision: 2, symbol: '$' } },
@@ -302,6 +289,7 @@ export function getAirtableConfig() {
     enabled: true,
     token: getEnv('AIRTABLE_TOKEN', { required: true }),
     baseId,
+    tableId: process.env.AIRTABLE_TABLE_ID || undefined,
     workspaceId,
     baseName,
     tableName: getEnv('AIRTABLE_TABLE_NAME', { required: true }),
@@ -312,6 +300,16 @@ export function getAirtableConfig() {
 }
 
 export async function ensureAirtableBaseAndTable(config, fields) {
+  if (config.baseId && config.tableId) {
+    return {
+      baseId: config.baseId,
+      tableId: config.tableId,
+      createdBase: false,
+      createdTable: false,
+      addedFields: []
+    };
+  }
+
   if (config.baseId) {
     const tableInfo = await ensureAirtableTable({ ...config, baseId: config.baseId }, fields);
     return { baseId: config.baseId, createdBase: false, ...tableInfo };
@@ -370,20 +368,39 @@ export async function ensureAirtableTable(config, fields) {
     throw new Error(`Table "${config.tableName}" not found in base ${config.baseId}.`);
   }
 
-  const created = await airtableRequest(baseUrl, {
-    method: 'POST',
-    token: config.token,
-    body: {
-      name: config.tableName,
-      fields: fields.map(sanitizeFieldForAirtable)
+  let created;
+  try {
+    created = await airtableRequest(baseUrl, {
+      method: 'POST',
+      token: config.token,
+      body: {
+        name: config.tableName,
+        fields: fields.map(sanitizeFieldForAirtable)
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('422')) {
+      throw error;
     }
-  });
+
+    const fallbackFields = fields.map((field) => ({ name: field.name, type: 'singleLineText' }));
+    created = await airtableRequest(baseUrl, {
+      method: 'POST',
+      token: config.token,
+      body: {
+        name: config.tableName,
+        fields: fallbackFields
+      }
+    });
+  }
 
   return { createdTable: true, tableId: created.id, addedFields: [] };
 }
 
 async function appendBatch(config, rows) {
-  const url = `https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`;
+  const tableRef = config.tableId || encodeURIComponent(config.tableName);
+  const url = `https://api.airtable.com/v0/${config.baseId}/${tableRef}`;
   return airtableRequest(url, {
     method: 'POST',
     token: config.token,

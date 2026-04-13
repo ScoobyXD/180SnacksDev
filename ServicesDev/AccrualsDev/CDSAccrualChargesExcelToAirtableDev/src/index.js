@@ -189,7 +189,7 @@ async function main() {
   const normalizedRows = normalizeRowsForAirtable(rows, headers);
   const fields = buildAirtableFields(headers, normalizedRows);
   const ensured = await ensureAirtableBaseAndTable(airtableConfig, fields);
-  const appended = await appendRowsToAirtable({ ...airtableConfig, baseId: ensured.baseId }, normalizedRows);
+  const appended = await appendRowsToAirtable({ ...airtableConfig, baseId: ensured.baseId, tableId: ensured.tableId }, normalizedRows);
 
   console.log(JSON.stringify({
     enabled: true,
@@ -198,6 +198,7 @@ async function main() {
     rowCount: rows.length,
     baseId: ensured.baseId,
     tableName: airtableConfig.tableName,
+    tableId: ensured.tableId || airtableConfig.tableId || null,
     createdBase: ensured.createdBase,
     createdTable: ensured.createdTable,
     inserted: appended.inserted,

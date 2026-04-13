@@ -13,7 +13,7 @@ Run from `ServicesDev/AccrualsDev/CDSAccrualChargesExcelToAirtableDev`:
    - If table exists, it can auto-add missing columns (`AIRTABLE_ADD_MISSING_FIELDS=true`).
 
 ## Environment
-Use `.env` (copy from `.env.example`) to set Airtable token/base/table values.
+Use `.env` (copy from `.env.example`) to set Airtable token/base/table values. You can provide `AIRTABLE_TABLE_ID` (tbl...) to target an existing table directly.
 
 ## Input resolution
 - Preferred: `--input=/absolute/or/relative/path.xlsx`
