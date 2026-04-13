@@ -1,49 +1,72 @@
-import { spawn } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { chromium, type Download } from 'playwright';
 
-type RunMode = 'recorded' | 'download';
+const portalUrl = 'https://portal-cdsus.demosystem.net/#/';
+const authPath = path.join('playwright', '.auth', 'cds.json');
+const downloadsDir = path.join('artifacts', 'downloads');
 
-function getMode(): RunMode {
-  const modeArg = process.argv.find((arg) => arg.startsWith('--mode='));
-  const mode = (modeArg?.split('=')[1] ?? 'recorded') as RunMode;
-
-  if (!['recorded', 'download'].includes(mode)) {
-    throw new Error(`Unsupported mode "${mode}". Use --mode=recorded|download`);
+async function assertAuthExists(): Promise<void> {
+  try {
+    await fs.access(authPath);
+  } catch {
+    throw new Error(`Missing auth storage state at ${authPath}. Run "npm run auth:setup" first.`);
   }
-
-  return mode;
 }
 
-function runCommand(command: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: 'inherit',
-      shell: process.platform === 'win32'
-    });
+async function saveDownload(download: Download): Promise<string> {
+  await fs.mkdir(downloadsDir, { recursive: true });
 
-    child.on('error', (error) => {
-      reject(error);
-    });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const suggested = download.suggestedFilename().replace(/\s+/g, '_');
+  const target = path.join(downloadsDir, `${stamp}-${suggested}`);
 
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`${command} exited with code ${code ?? 'unknown'}`));
-    });
-  });
+  await download.saveAs(target);
+  return target;
 }
 
 async function main(): Promise<void> {
-  const mode = getMode();
+  await assertAuthExists();
 
-  if (mode === 'download') {
-    await runCommand('node', ['--loader', 'ts-node/esm', 'src/downloadFromAuth.ts']);
-    return;
+  const browser = await chromium.launch({ headless: false, slowMo: 50 });
+  const context = await browser.newContext({
+    storageState: authPath,
+    acceptDownloads: true
+  });
+
+  const page = await context.newPage();
+
+  try {
+    await page.goto(portalUrl, { waitUntil: 'domcontentloaded' });
+
+    await page.getByRole('button', { name: 'SELECT' }).click();
+    await page.getByRole('listitem').filter({ hasText: 'REPORTING' }).click();
+    await page.getByRole('link', { name: 'Event Status Report' }).click();
+
+    const vizFrame = page.locator('iframe[title="Data Visualization"]').contentFrame();
+
+    await vizFrame.getByRole('textbox', { name: 'From Date' }).click();
+    await vizFrame.locator('.tab-datepicker-header-button').first().click();
+    await vizFrame.locator('.tab-datepicker-header-button').first().click();
+    await vizFrame.getByRole('cell', { name: '9', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Export to Excel' }).click();
+
+    const popupPromise = page.waitForEvent('popup');
+    const downloadPromise = page.waitForEvent('download');
+    await vizFrame.locator('[data-test-id="DownloadLink"]').click();
+
+    const popup = await popupPromise;
+    await popup.close();
+
+    const download = await downloadPromise;
+    const savedPath = await saveDownload(download);
+    console.log(`Saved download to ${savedPath}`);
+  } finally {
+    await context.close();
+    await browser.close();
   }
-
-  await runCommand('playwright', ['test', 'generated/cds.codegen.spec.ts', '--headed', '--workers=1']);
+}
 
 main().catch((error) => {
   console.error(error);
