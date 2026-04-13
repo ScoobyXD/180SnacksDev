@@ -1,7 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Download } from 'playwright';
-import { syncWorkbookToAirtable } from './airtableSync.js';
 
 const portalUrl = 'https://portal-cdsus.demosystem.net/#/';
 const authPath = path.join('playwright', '.auth', 'cds.json');
@@ -60,13 +59,6 @@ async function main(): Promise<void> {
 
     await popup.close().catch(() => undefined);
     console.log(`Saved download to ${saved}`);
-
-    const airtableSync = await syncWorkbookToAirtable(saved);
-    if (airtableSync.enabled) {
-      console.log(`Airtable append complete: ${airtableSync.inserted}/${airtableSync.rowCount} rows inserted into ${airtableSync.tableName} (${airtableSync.baseId}).`);
-    } else {
-      console.log('Airtable sync skipped (AIRTABLE_SYNC_ENABLED is false).');
-    }
 
   } finally {
     await context.close();
