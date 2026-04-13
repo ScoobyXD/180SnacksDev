@@ -10,8 +10,10 @@ Run these from `ServicesDev/AccrualsDev/CDSExtractDev`.
    - `npm run auth:setup`
 2. Record/update your generated Playwright steps:
    - `npm run record:auth`
-3. Run the generated workflow:
+3. Run the scripted extractor workflow (`src/index.mjs`):
    - `npm run run`
+4. Run the generated codegen test directly:
+   - `npm run run:codegen`
 
 ## Key paths
 - Auth file: `playwright/.auth/cds.json`
